@@ -1,7 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
-
 import { cn } from '../../../lib/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
 import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
@@ -14,12 +13,10 @@ import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
 import { Project } from '../../../types/app';
 import { ScrollArea, Input } from '../../../shared/view/ui';
-
 import FileTreeBody from './FileTreeBody';
 import FileTreeDetailedColumns from './FileTreeDetailedColumns';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
-import FileTreeUploadProgress from './FileTreeUploadProgress';
 import ImageViewer from './ImageViewer';
 
 
@@ -48,7 +45,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, error, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -69,7 +66,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     onRefresh: refreshFiles,
     showToast,
   });
-  const operationLoading = operations.operationLoading || upload.operationLoading;
 
   // Focus input when creating new item
   useEffect(() => {
@@ -106,7 +102,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           path: item.path,
           projectPath: selectedProject.path,
           // Image URL uses the DB projectId so ImageViewer can hit the
-          // /api/file-tree/projects/:projectId/files/content endpoint directly.
+          // /api/projects/:projectId/files/content endpoint directly.
           projectId: selectedProject.projectId,
         });
         return;
@@ -150,18 +146,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onUploadFiles={upload.handleFileSelect}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
-        operationLoading={operationLoading}
-        isUploading={upload.uploadProgress?.status === 'uploading'}
-        uploadProgress={upload.uploadProgress?.progress ?? null}
+        operationLoading={operations.operationLoading}
       />
-
-      <FileTreeUploadProgress upload={upload.uploadProgress} />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
 
@@ -193,7 +184,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
                 }, 100);
               }}
               className="h-6 flex-1 text-sm"
-              disabled={operationLoading}
+              disabled={operations.operationLoading}
             />
           </div>
         )}
@@ -201,7 +192,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         <FileTreeBody
           files={files}
           filteredFiles={filteredFiles}
-          error={error}
           searchQuery={searchQuery}
           viewMode={viewMode}
           expandedDirs={expandedDirs}
@@ -223,7 +213,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           handleConfirmRename={operations.handleConfirmRename}
           handleCancelRename={operations.handleCancelRename}
           renameInputRef={renameInputRef}
-          operationLoading={operationLoading}
+          operationLoading={operations.operationLoading}
         />
       </ScrollArea>
 
@@ -261,17 +251,17 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             <div className="flex justify-end gap-2">
               <button
                 onClick={operations.handleCancelDelete}
-                disabled={operationLoading}
+                disabled={operations.operationLoading}
                 className="rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 {t('common.cancel', 'Cancel')}
               </button>
               <button
                 onClick={operations.handleConfirmDelete}
-                disabled={operationLoading}
+                disabled={operations.operationLoading}
                 className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
-                {operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {operations.operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t('fileTree.delete.confirm', 'Delete')}
               </button>
             </div>

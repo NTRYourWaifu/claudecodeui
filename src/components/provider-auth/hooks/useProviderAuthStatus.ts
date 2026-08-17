@@ -70,39 +70,34 @@ export function useProviderAuthStatus(
     }));
   }, []);
 
-  const checkProviderAuthStatus = useCallback(async (provider: LLMProvider): Promise<ProviderAuthStatus> => {
+  const checkProviderAuthStatus = useCallback(async (provider: LLMProvider) => {
     setProviderLoading(provider);
 
     try {
       const response = await authenticatedFetch(PROVIDER_AUTH_STATUS_ENDPOINTS[provider]);
 
       if (!response.ok) {
-        const status: ProviderAuthStatus = {
+        setProviderStatus(provider, {
           authenticated: false,
           email: null,
           method: null,
           loading: false,
           error: FALLBACK_STATUS_ERROR,
-        };
-        setProviderStatus(provider, status);
-        return status;
+        });
+        return;
       }
 
       const payload = (await response.json()) as ProviderAuthStatusApiResponse;
-      const status = toProviderAuthStatus(payload.data);
-      setProviderStatus(provider, status);
-      return status;
+      setProviderStatus(provider, toProviderAuthStatus(payload.data));
     } catch (caughtError) {
       console.error(`Error checking ${provider} auth status:`, caughtError);
-      const status: ProviderAuthStatus = {
+      setProviderStatus(provider, {
         authenticated: false,
         email: null,
         method: null,
         loading: false,
         error: toErrorMessage(caughtError),
-      };
-      setProviderStatus(provider, status);
-      return status;
+      });
     }
   }, [setProviderLoading, setProviderStatus]);
 

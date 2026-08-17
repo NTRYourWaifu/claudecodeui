@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { useServerPlatform } from '../../../../../hooks/useServerPlatform';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
 
 import type { AgentContext, AgentsSettingsTabProps } from './types';
@@ -16,19 +17,28 @@ export default function AgentsSettingsTab({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  geminiPermissionMode,
+  onGeminiPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
-  const visibleCategories = useMemo<AgentCategory[]>(() => (
-    selectedAgent === 'opencode'
-      ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
-  ), [selectedAgent]);
+  const { isWindowsServer } = useServerPlatform();
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
-  }, []);
+    const all: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+    if (isWindowsServer) {
+      return all.filter((id) => id !== 'cursor');
+    }
+
+    return all;
+  }, [isWindowsServer]);
+
+  useEffect(() => {
+    if (isWindowsServer && selectedAgent === 'cursor') {
+      setSelectedAgent('claude');
+    }
+  }, [isWindowsServer, selectedAgent]);
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
@@ -43,26 +53,20 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.codex,
       onLogin: () => onProviderLogin('codex'),
     },
-    opencode: {
-      authStatus: providerAuthStatus.opencode,
-      onLogin: () => onProviderLogin('opencode'),
+    gemini: {
+      authStatus: providerAuthStatus.gemini,
+      onLogin: () => onProviderLogin('gemini'),
     },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
-    providerAuthStatus.opencode,
+    providerAuthStatus.gemini,
   ]);
 
-  useEffect(() => {
-    if (!visibleCategories.includes(selectedCategory)) {
-      setSelectedCategory(visibleCategories[0] ?? 'account');
-    }
-  }, [selectedCategory, visibleCategories]);
-
   return (
-    <div className="-mx-4 -mb-4 -mt-2 flex min-h-[300px] min-w-0 flex-col overflow-hidden md:-mx-6 md:-mb-6 md:-mt-2 md:min-h-[500px]">
+    <div className="-mx-4 -mb-4 -mt-2 flex min-h-[300px] flex-col overflow-hidden md:-mx-6 md:-mb-6 md:-mt-2 md:min-h-[500px]">
       <AgentSelectorSection
         agents={visibleAgents}
         selectedAgent={selectedAgent}
@@ -70,10 +74,8 @@ export default function AgentsSettingsTab({
         agentContextById={agentContextById}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <AgentCategoryTabsSection
-          categories={visibleCategories}
-          selectedAgent={selectedAgent}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
         />
@@ -88,6 +90,8 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
+          geminiPermissionMode={geminiPermissionMode}
+          onGeminiPermissionModeChange={onGeminiPermissionModeChange}
           projects={projects}
         />
       </div>

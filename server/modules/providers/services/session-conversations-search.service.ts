@@ -8,7 +8,7 @@ import { rgPath } from '@vscode/ripgrep';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
-type SearchableProvider = 'claude' | 'codex';
+type SearchableProvider = 'claude' | 'codex' | 'gemini';
 
 type SearchSnippetHighlight = {
   start: number;
@@ -82,7 +82,7 @@ type ProjectBucket = {
   sessions: SearchableSessionRow[];
 };
 
-const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
+const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex', 'gemini']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
@@ -455,6 +455,21 @@ function extractCodexText(content: unknown): string {
     .join(' ');
 }
 
+function extractGeminiText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  return content
+    .filter((part: AnyRecord) => typeof part?.text === 'string')
+    .map((part: AnyRecord) => String(part.text))
+    .join(' ');
+}
+
 function normalizeSearchableSessions(rows: SessionRepositoryRow[]): SearchableSessionRow[] {
   const normalizedRows: SearchableSessionRow[] = [];
   const projectArchiveStateByPath = new Map<string, boolean>();
@@ -787,18 +802,11 @@ async function parseClaudeSessionMatches(
       ? matchedSessionsForFile
       : [session];
 
-    // Transcript lines are tagged with the provider session id (e.g. Claude's own
-    // conversation UUID), which is not necessarily the app-facing `session_id`.
-    // Match and attribute by the provider id, but map results back to the
-    // internal `session_id` the rest of the app uses to identify sessions.
-    const providerToInternalId = new Map<string, string>();
+    const targetSessionIds = new Set(targetSessions.map((candidate) => candidate.session_id));
     const customNameBySessionId = new Map<string, string | null>();
     for (const candidate of targetSessions) {
-      const providerId = candidate.provider_session_id || candidate.session_id;
-      providerToInternalId.set(providerId, candidate.session_id);
-      customNameBySessionId.set(providerId, candidate.custom_name ?? null);
+      customNameBySessionId.set(candidate.session_id, candidate.custom_name ?? null);
     }
-    const targetSessionIds = new Set(providerToInternalId.keys());
 
     type ClaudeSessionSearchState = {
       matches: SessionConversationMatch[];
@@ -919,9 +927,8 @@ async function parseClaudeSessionMatches(
         continue;
       }
 
-      const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
-      fileResults.set(internalSessionId, {
-        sessionId: internalSessionId,
+      fileResults.set(sessionId, {
+        sessionId,
         provider: 'claude',
         sessionSummary: toSummaryText(
           customNameBySessionId.get(sessionId) ?? null,
@@ -1058,6 +1065,81 @@ async function parseCodexSessionMatches(
   };
 }
 
+async function parseGeminiSessionMatches(
+  session: SearchableSessionRow,
+  runtime: SearchRuntime,
+): Promise<SessionConversationResult | null> {
+  let data: string;
+  try {
+    data = await fs.readFile(session.jsonl_path, 'utf8');
+  } catch {
+    return null;
+  }
+
+  let parsed: AnyRecord;
+  try {
+    parsed = JSON.parse(data) as AnyRecord;
+  } catch {
+    return null;
+  }
+
+  const sourceMessages = Array.isArray(parsed.messages) ? parsed.messages as AnyRecord[] : [];
+  if (sourceMessages.length === 0) {
+    return null;
+  }
+
+  const matches: SessionConversationMatch[] = [];
+  let firstUserText: string | null = null;
+
+  for (const msg of sourceMessages) {
+    if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
+      break;
+    }
+
+    const role = msg.type === 'user'
+      ? 'user'
+      : (msg.type === 'gemini' || msg.type === 'assistant')
+        ? 'assistant'
+        : null;
+    if (!role) {
+      continue;
+    }
+
+    const text = extractGeminiText(msg.content);
+    if (!text) {
+      continue;
+    }
+
+    if (role === 'user' && !firstUserText) {
+      firstUserText = text;
+    }
+
+    if (!runtime.matchesQuery(text)) {
+      continue;
+    }
+
+    const { snippet, highlights } = runtime.buildSnippet(text);
+    addSessionMatch(runtime, matches, {
+      role,
+      snippet,
+      highlights,
+      timestamp: msg.timestamp ? String(msg.timestamp) : null,
+      provider: 'gemini',
+    });
+  }
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  return {
+    sessionId: session.session_id,
+    provider: 'gemini',
+    sessionSummary: toSummaryText(session.custom_name, firstUserText, 'Gemini Session'),
+    matches,
+  };
+}
+
 async function parseSessionMatches(
   session: SearchableSessionRow,
   runtime: SearchRuntime,
@@ -1068,7 +1150,7 @@ async function parseSessionMatches(
   if (session.provider === 'codex') {
     return parseCodexSessionMatches(session, runtime);
   }
-  return null;
+  return parseGeminiSessionMatches(session, runtime);
 }
 
 export async function searchConversations(

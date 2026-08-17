@@ -374,7 +374,13 @@ export function useSlashCommands({
       setFilteredCommands(slashCommands);
     }
 
-    textareaRef.current?.focus();
+    // 手機 / 觸控裝置不要 focus textarea，避免跳出鍵盤遮畫面
+    const isTouch =
+      typeof window !== 'undefined' &&
+      (navigator.maxTouchPoints > 0 || window.matchMedia?.('(pointer: coarse)').matches);
+    if (!isTouch) {
+      textareaRef.current?.focus();
+    }
   }, [showCommandMenu, slashCommands, textareaRef]);
 
   const handleCommandInputChange = useCallback(
@@ -393,8 +399,7 @@ export function useSlashCommands({
         return;
       }
 
-      // Match / at start of input OR after whitespace, capturing the /word up to cursor.
-      const slashPattern = /(?:^|\s)(\/\S*)$/;
+      const slashPattern = /^\/(\S*)$/;
       const match = textBeforeCursor.match(slashPattern);
 
       if (!match) {
@@ -402,9 +407,8 @@ export function useSlashCommands({
         return;
       }
 
-      // Compute actual position of / in the full input string.
-      const slashPos = match.index! + (match[0].length - match[1].length);
-      const query = match[1].slice(1); // strip leading /
+      const slashPos = 0;
+      const query = match[1];
 
       setSlashPosition(slashPos);
       setShowCommandMenu(true);

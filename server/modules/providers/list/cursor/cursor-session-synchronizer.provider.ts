@@ -141,13 +141,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const text = typeof data.message?.content?.[0]?.text === 'string' ? data.message.content[0].text : '';
-      // Drop Cursor's `<timestamp>…</timestamp>` prefix and `<user_query>` tags
-      // so the session name comes from the actual first line the user typed.
-      const firstLine = text
-        .replace(/<timestamp>[\s\S]*?<\/timestamp>/g, '')
-        .replace(/<\/?user_query>/g, '')
-        .trim()
-        .split('\n')[0];
+      const firstLine = text.replace(/<\/?user_query>/g, '').trim().split('\n')[0];
 
       return {
         sessionId,

@@ -1,4 +1,5 @@
 export const CODE_EDITOR_STORAGE_KEYS = {
+  theme: 'codeEditorTheme',
   wordWrap: 'codeEditorWordWrap',
   showMinimap: 'codeEditorShowMinimap',
   lineNumbers: 'codeEditorLineNumbers',
@@ -6,6 +7,7 @@ export const CODE_EDITOR_STORAGE_KEYS = {
 } as const;
 
 export const CODE_EDITOR_DEFAULTS = {
+  isDarkMode: true,
   wordWrap: false,
   minimapEnabled: true,
   showLineNumbers: true,

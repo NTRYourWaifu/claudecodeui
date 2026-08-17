@@ -310,7 +310,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingMCP(true);
       clearError();
 
-      const response = await api.get('/taskmaster/mcp-status');
+      const response = await api.get('/mcp-utils/taskmaster-server');
       if (!response.ok) {
         throw new Error(`Failed to load MCP status: ${response.status}`);
       }

@@ -14,7 +14,6 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -24,9 +23,6 @@ import type {
   ApiSuccessShape,
   AppErrorOptions,
   NormalizedMessage,
-  ProviderCurrentActiveModel,
-  ProviderModelsDefinition,
-  ProviderSkillSource,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
@@ -171,6 +167,8 @@ function shouldUseWindowsPathNormalization(inputPath: string): boolean {
  * - strip Windows long-path prefixes (`\\?\` and `\\?\UNC\`)
  * - normalize path separators and dot segments
  * - trim trailing separators except for filesystem roots
+ * - uppercase Windows drive letters so `f:\foo` and `F:\foo` collapse into one
+ *   key (matches what Node's `process.cwd()` reports on Windows)
  */
 export function normalizeProjectPath(inputPath: string): string {
   if (typeof inputPath !== 'string') {
@@ -194,11 +192,13 @@ export function normalizeProjectPath(inputPath: string): string {
 
   const parser = useWindowsPathRules ? path.win32 : path.posix;
   const root = parser.parse(normalized).root;
-  if (normalized === root) {
-    return normalized;
+  const withoutTrailingSep = normalized === root ? normalized : normalized.replace(/[\\/]+$/, '');
+
+  if (useWindowsPathRules) {
+    return withoutTrailingSep.replace(/^([a-z]):/, (_match, letter: string) => `${letter.toUpperCase()}:`);
   }
 
-  return normalized.replace(/[\\/]+$/, '');
+  return withoutTrailingSep;
 }
 
 /**
@@ -344,84 +344,6 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
   };
 }
 
-/**
- * Build the unified terminal `complete` lifecycle message.
- *
- * Contract: every provider run ends with exactly one `complete` (the
- * abort-session handler emits it on behalf of cancelled runs, so aborted runs
- * must NOT emit their own). The frontend treats `complete` as the only
- * terminal signal and never needs provider-specific handling:
- *
- * - `sessionId`     — the id the client knows this run by ('' if never discovered)
- * - `actualSessionId` — canonical id after the run; equals `sessionId` unless
- *                       the provider rewrote it mid-run
- * - `exitCode`      — 0 on success; a missing/null code (e.g. killed process)
- *                     is reported as failure
- * - `success`       — exitCode === 0 and not aborted
- * - `aborted`       — run was cancelled by the user
- */
-export function createCompleteMessage(opts: {
-  provider: NormalizedMessage['provider'];
-  sessionId?: string | null;
-  actualSessionId?: string | null;
-  exitCode?: number | null;
-  aborted?: boolean;
-}): NormalizedMessage {
-  const exitCode = typeof opts.exitCode === 'number' ? opts.exitCode : 1;
-  const aborted = Boolean(opts.aborted);
-
-  return createNormalizedMessage({
-    kind: 'complete',
-    provider: opts.provider,
-    sessionId: opts.sessionId || null,
-    actualSessionId: opts.actualSessionId || opts.sessionId || null,
-    exitCode,
-    success: exitCode === 0 && !aborted,
-    aborted,
-  });
-}
-
-// ---------------------------
-//----------------- CONVERSATION HISTORY PAGINATION UTILITIES ------------
-/**
- * Slices one page from the END of a chronologically ordered message list.
- *
- * This is the single pagination contract for conversation history across all
- * providers: `offset = 0` returns the most recent `limit` items, increasing
- * offsets walk backwards in time (for "scroll up to load older" UIs), and a
- * `null` limit returns everything. Items must already be sorted oldest-first;
- * the returned page preserves that order.
- *
- * Every provider history reader must use this helper instead of slicing
- * manually so `offset`/`limit` query params behave identically regardless of
- * which provider produced the session.
- */
-export function sliceTailPage<T>(
-  items: T[],
-  limit: number | null,
-  offset: number,
-): { page: T[]; hasMore: boolean } {
-  const total = items.length;
-  const normalizedOffset = Math.max(0, offset);
-
-  if (limit === null) {
-    // A null limit returns the full list; offset still trims newest entries
-    // so "everything before the page I already have" stays expressible.
-    const end = Math.max(0, total - normalizedOffset);
-    return {
-      page: items.slice(0, end),
-      hasMore: false,
-    };
-  }
-
-  const end = Math.max(0, total - normalizedOffset);
-  const start = Math.max(0, end - Math.max(0, limit));
-  return {
-    page: items.slice(start, end),
-    hasMore: start > 0,
-  };
-}
-
 // ---------------------------
 //----------------- MCP CONFIG PARSING UTILITIES ------------
 /**
@@ -494,24 +416,6 @@ export const readStringRecord = (value: unknown): Record<string, string> | undef
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
-
-// ---------------------------
-//----------------- PROVIDER MODEL LOOKUP UTILITIES ------------
-/**
- * Builds the standard "default current model" result used when a provider
- * cannot resolve a session-backed active model.
- *
- * Provider model adapters should call this after loading their supported model
- * catalog so the fallback stays aligned with the provider's current `DEFAULT`
- * selection instead of drifting to a hard-coded duplicate.
- */
-export function buildDefaultProviderCurrentActiveModel(
-  models: ProviderModelsDefinition,
-): ProviderCurrentActiveModel {
-  return {
-    model: models.DEFAULT,
-  };
-}
 
 // ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
@@ -606,67 +510,6 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
 
 // ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
-async function hasGitMarker(dirPath: string): Promise<boolean> {
-  try {
-    const gitMarkerStats = await stat(path.join(dirPath, '.git'));
-    return gitMarkerStats.isDirectory() || gitMarkerStats.isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Finds the highest git worktree root visible from a starting directory.
- *
- * Provider skill systems such as Codex and OpenCode walk upward through parent
- * folders when resolving repository/project skills. Use this helper when a
- * provider needs the topmost `.git` marker instead of only the nearest one, so
- * monorepos and nested package folders discover shared root-level skills once.
- */
-export async function findTopmostGitRoot(startPath: string): Promise<string | null> {
-  let currentPath = path.resolve(startPath);
-  let topmostGitRoot: string | null = null;
-
-  while (true) {
-    if (await hasGitMarker(currentPath)) {
-      topmostGitRoot = currentPath;
-    }
-
-    const parentPath = path.dirname(currentPath);
-    if (parentPath === currentPath) {
-      break;
-    }
-
-    currentPath = parentPath;
-  }
-
-  return topmostGitRoot;
-}
-
-/**
- * Adds one provider skill source after normalizing and de-duplicating its root.
- *
- * Provider skill lookup rules often point at overlapping folders (for example a
- * workspace folder can also be the git root). Use this helper while building a
- * provider's `ProviderSkillSource[]` so the shared skills scanner reads each
- * physical root once and still preserves provider-specific scope/command data.
- */
-export function addUniqueProviderSkillSource(
-  sources: ProviderSkillSource[],
-  seenRootDirs: Set<string>,
-  source: ProviderSkillSource,
-): void {
-  const normalizedRootDir = path.resolve(source.rootDir);
-  if (seenRootDirs.has(normalizedRootDir)) {
-    return;
-  }
-
-  seenRootDirs.add(normalizedRootDir);
-  sources.push({ ...source, rootDir: normalizedRootDir });
-}
-
-// ---------------------------
-//----------------- PROVIDER SKILL MARKDOWN UTILITIES ------------
 /**
  * Finds direct child skill markdown files under a provider skill root.
  *
@@ -701,7 +544,7 @@ export async function findProviderSkillMarkdownFiles(
     }
 
     for (const entry of entries) {
-      if (entry.isDirectory() || entry.isSymbolicLink()) {
+      if (entry.isDirectory()) {
         await collectRecursive(path.join(dirPath, entry.name));
       }
     }
@@ -716,7 +559,7 @@ export async function findProviderSkillMarkdownFiles(
     const entries = await readdir(rootDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+      if (!entry.isDirectory()) {
         continue;
       }
 
@@ -748,25 +591,9 @@ export async function readProviderSkillMarkdownDefinition(
   skillPath: string,
 ): Promise<{ name: string; description: string }> {
   const content = await readFile(skillPath, 'utf8');
-  return readProviderSkillMarkdownDefinitionFromContent(
-    content,
-    path.basename(path.dirname(skillPath)),
-  );
-}
-
-/**
- * Reads the `name` and `description` fields from raw skill markdown content.
- *
- * This keeps filesystem discovery and newly uploaded skill creation aligned on
- * the same front matter parsing rules. `fallbackName` is used when the markdown
- * omits a `name` field so callers still get a stable, non-empty skill id.
- */
-export function readProviderSkillMarkdownDefinitionFromContent(
-  content: string,
-  fallbackName: string,
-): { name: string; description: string } {
   const parsed = parseFrontMatter(content);
   const data = readObjectRecord(parsed.data) ?? {};
+  const fallbackName = path.basename(path.dirname(skillPath));
 
   return {
     name: readOptionalString(data.name) ?? fallbackName,
@@ -791,122 +618,6 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
   }
 
   return normalized.slice(0, 120);
-}
-
-// ---------------------------
-//----------------- PROVIDER SESSION VALUE NORMALIZATION UTILITIES ------------
-/**
- * Converts provider-native timestamps into ISO strings.
- *
- * Provider CLIs commonly persist epoch timestamps as milliseconds, seconds, or
- * already-formatted date strings. Use this helper when normalizing session
- * metadata or transcript events so every provider writes the same ISO timestamp
- * shape to API responses and database rows.
- */
-export function normalizeProviderTimestamp(value: unknown): string {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    const millis = value < 1_000_000_000_000 ? value * 1000 : value;
-    return new Date(millis).toISOString();
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return normalizeProviderTimestamp(parsed);
-    }
-
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString();
-    }
-  }
-
-  return new Date().toISOString();
-}
-
-/**
- * Parses a JSON string or narrows an existing object into a plain record.
- *
- * Use this when provider databases store structured JSON inside text columns.
- * Invalid JSON, arrays, and primitive values return `null` so callers can skip
- * malformed optional metadata without hiding the rest of a session transcript.
- */
-export function readJsonRecord(value: unknown): AnyRecord | null {
-  if (typeof value !== 'string') {
-    return readObjectRecord(value);
-  }
-
-  try {
-    return readObjectRecord(JSON.parse(value));
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------
-//----------------- OPENCODE SESSION STORAGE UTILITIES ------------
-/**
- * Resolves the OpenCode SQLite session database path.
- *
- * OpenCode stores session, message, part, and project metadata in one shared
- * `opencode.db` file under its XDG data directory. Provider readers and
- * synchronizers should use this path for read-only access and should never store
- * it as a deletable transcript path for an individual app session row.
- */
-export function getOpenCodeDatabasePath(): string {
-  return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
-}
-
-/**
- * Decodes an OpenCode text payload that was persisted as a JSON string literal.
- *
- * OpenCode can store the first user prompt (and other text parts) as `"hello"`
- * instead of `hello`. Used by both the OpenCode session reader (transcript
- * history) and the OpenCode synchronizer (session titling) so a session name or
- * message body never surfaces with surrounding quote characters. Only fully
- * quoted, valid JSON string literals are unwrapped; ordinary prose that merely
- * happens to start/end with a quote is returned untouched.
- */
-export function unwrapJsonStringLiteral(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
-    return value;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    return typeof parsed === 'string' ? parsed : value;
-  } catch {
-    return value;
-  }
-}
-
-// ---------------------------
-//----------------- SAFE DIRECTORY NAME UTILITIES ------------
-/**
- * Validates that a user or provider supplied identifier can safely be treated
- * as one leaf directory name under an existing root folder.
- *
- * Use this before composing paths like `<root>/<session-id>/file.db>` to block
- * path traversal and accidental nested paths. The returned string is trimmed but
- * otherwise unchanged so callers can still match the provider's on-disk naming.
- */
-export function sanitizeLeafDirectoryName(inputName: string, label = 'directory name'): string {
-  const normalized = inputName.trim();
-  if (!normalized) {
-    throw new Error(`${label} is required.`);
-  }
-
-  if (
-    normalized.includes('..')
-    || normalized.includes(path.posix.sep)
-    || normalized.includes(path.win32.sep)
-    || normalized !== path.basename(normalized)
-  ) {
-    throw new Error(`Invalid ${label} "${inputName}".`);
-  }
-
-  return normalized;
 }
 
 // ---------------------------
@@ -1054,98 +765,3 @@ export async function extractFirstValidJsonlData<T>(
   return null;
 }
 
-// ---------------------------
-//----------------- CLI PROMPT ARGUMENT UTILITIES ------------
-/**
- * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
- * Windows (cursor-agent and opencode installed via npm-style shims).
- *
- * cmd.exe cannot carry newlines inside an argument: everything after the
- * first newline is silently dropped before the target CLI ever sees it, which
- * truncates multi-line prompts and any appended `<images_input>` block.
- * Collapsing newline runs to single spaces loses formatting but never loses
- * content, so runtimes should call this on win32 right before spawning.
- *
- * Used by the cursor and opencode spawn runtimes.
- */
-export function flattenPromptForWindowsShell(prompt: string): string {
-  if (process.platform !== 'win32' || typeof prompt !== 'string') {
-    return prompt;
-  }
-  return prompt.replace(/\s*\r?\n\s*/g, ' ').trim();
-}
-
-// ---------------------------
-//----------------- TERMINAL OUTPUT UTILITIES ------------
-const ANSI_TERMINAL_STYLES = {
-  reset: '\x1b[0m',
-  bright: '\x1b[1m',
-  dim: '\x1b[2m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-} as const;
-
-/**
- * Applies the small, consistent ANSI style vocabulary used by backend
- * terminal output. The CLI and server bootstrap share these formatters so
- * status, warning, and startup messages use one implementation. Callers
- * should pass complete display strings and write the returned value directly
- * to stdout or stderr; the reset suffix prevents styling subsequent output.
- */
-export const terminalTextStyles = {
-  info: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.cyan}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  ok: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.green}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  warn: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  error: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  tip: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.blue}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  bright: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.bright}${text}${ANSI_TERMINAL_STYLES.reset}`,
-  dim: (text: string): string =>
-    `${ANSI_TERMINAL_STYLES.dim}${text}${ANSI_TERMINAL_STYLES.reset}`,
-};
-
-// ---------------------------
-//----------------- RUNTIME PATH RESOLUTION UTILITIES ------------
-/**
- * Resolves the directory containing an ES module from `import.meta.url`.
- * Backend entrypoints and feature composition roots use this instead of
- * recreating CommonJS `__dirname` logic.
- */
-export function getModuleDirectory(importMetaUrl: string): string {
-  return path.dirname(fileURLToPath(importMetaUrl));
-}
-
-/**
- * Walks upward to the nearest `server` directory in either source or compiled
- * output. Callers use this stable anchor for server-relative resources.
- */
-export function findServerRoot(startDirectory: string): string {
-  let currentDirectory = startDirectory;
-  while (path.basename(currentDirectory) !== 'server') {
-    const parentDirectory = path.dirname(currentDirectory);
-    if (parentDirectory === currentDirectory) {
-      throw new Error(`Could not resolve the backend server root from "${startDirectory}".`);
-    }
-    currentDirectory = parentDirectory;
-  }
-  return currentDirectory;
-}
-
-/**
- * Resolves the application root from a source or `dist-server/server` path so
- * package-level resources work identically before and after compilation.
- */
-export function findApplicationRoot(startDirectory: string): string {
-  const serverRoot = findServerRoot(startDirectory);
-  const parentDirectory = path.dirname(serverRoot);
-  return path.basename(parentDirectory) === 'dist-server'
-    ? path.dirname(parentDirectory)
-    : parentDirectory;
-}

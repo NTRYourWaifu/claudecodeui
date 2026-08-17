@@ -1,4 +1,33 @@
 {
+  "accountUsage": {
+    "title": "Account & Usage",
+    "account": "Account",
+    "authMethod": "Auth method",
+    "email": "Email",
+    "notAuthed": "Not authenticated",
+    "usage": "Usage",
+    "fiveHr": "Session (5hr)",
+    "weekly": "Weekly (7 day)",
+    "noUsageYet": "Send a message first to receive rate-limit info from Claude.",
+    "overage": "Currently on overage credit usage",
+    "manageOnClaudeAi": "Manage usage on claude.ai"
+  },
+  "slashCommands": {
+    "help": "Show help documentation for Claude Code",
+    "clear": "Clear the conversation history",
+    "compact": "Summarize and compress the conversation to free up context",
+    "context": "Show how the context window is being used (tokens by topic)",
+    "model": "Switch or view the current AI model",
+    "cost": "Display token usage and cost information",
+    "usage": "Show your subscription usage and rate-limit window",
+    "memory": "Open CLAUDE.md memory file for editing",
+    "init": "Analyze the codebase and generate a starter CLAUDE.md",
+    "review": "Review the pending changes on the current branch",
+    "securityReview": "Run a security audit on the pending changes",
+    "config": "Open settings and configuration",
+    "status": "Show system status and version information",
+    "rewind": "Rewind the conversation to a previous state"
+  },
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied",
@@ -18,7 +47,7 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "gemini": "Gemini"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -103,13 +132,23 @@
     },
     "technicalDetails": "Technical details"
   },
-  "voice": {
-    "input": "Voice input",
-    "stopRecording": "Stop recording",
-    "transcribing": "Transcribing…",
-    "speak": "Read aloud",
-    "stopSpeaking": "Stop",
-    "loading": "Loading…"
+  "gemini": {
+    "permissionMode": "Gemini Permission Mode",
+    "description": "Control how Gemini CLI handles operation approvals.",
+    "modes": {
+      "default": {
+        "title": "Standard (Ask for Approval)",
+        "description": "Gemini will prompt for approval before executing commands, writing files, and fetching web resources."
+      },
+      "autoEdit": {
+        "title": "Auto Edit (Skip File Approvals)",
+        "description": "Gemini will automatically approve file edits and web fetches, but will still prompt for shell commands."
+      },
+      "yolo": {
+        "title": "YOLO (Bypass All Permissions)",
+        "description": "Gemini will execute all operations without asking for approval. Exercise caution."
+      }
+    }
   },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
@@ -121,30 +160,48 @@
     "stop": "Stop",
     "hintText": {
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
-      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
-      "queue": "Enter to queue your next message",
-      "updateQueued": "Enter to update queued message"
+      "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
     "clearInput": "Clear input",
-    "scrollToBottom": "Scroll to bottom",
-    "queue": {
-      "sendNext": "Queue next message",
-      "update": "Update queued message",
-      "label": "Queued",
-      "willSend": "Will send when this finishes",
-      "edit": "Edit queued message",
-      "delete": "Delete queued message"
-    }
+    "scrollToBottom": "Scroll to bottom"
   },
-  "composer": {
-    "reasoning": "Reasoning",
-    "model": "Model",
-    "effortDefault": "Default",
-    "loadingModels": "Loading models…",
-    "modelMenu": "Select model and reasoning effort",
-    "permissionHeading": "How should {{provider}} actions be approved?"
+  "thinkingMode": {
+    "selector": {
+      "title": "Thinking Mode",
+      "description": "Extended thinking gives Claude more time to evaluate alternatives",
+      "active": "Active",
+      "tip": "Higher thinking modes take more time but provide more thorough analysis"
+    },
+    "modes": {
+      "none": {
+        "name": "Standard",
+        "description": "Regular Claude response",
+        "prefix": ""
+      },
+      "think": {
+        "name": "Think",
+        "description": "Basic extended thinking",
+        "prefix": "think"
+      },
+      "thinkHard": {
+        "name": "Think Hard",
+        "description": "More thorough evaluation",
+        "prefix": "think hard"
+      },
+      "thinkHarder": {
+        "name": "Think Harder",
+        "description": "Deep analysis with alternatives",
+        "prefix": "think harder"
+      },
+      "ultrathink": {
+        "name": "Ultrathink",
+        "description": "Maximum thinking budget",
+        "prefix": "ultrathink"
+      }
+    },
+    "buttonTitle": "Thinking mode: {{mode}}"
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",
@@ -160,7 +217,7 @@
       "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
-      "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
+      "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
@@ -199,7 +256,7 @@
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect from shell",
       "restart": "Restart",
-      "restartTitle": "Restart Shell",
+      "restartTitle": "Restart Shell (disconnect first)",
       "connect": "Continue in Shell",
       "connectTitle": "Connect to shell"
     },
@@ -230,7 +287,6 @@
       "label": "{{time}} elapsed",
       "startingNow": "Starting now"
     },
-    "stop": "Stop",
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"

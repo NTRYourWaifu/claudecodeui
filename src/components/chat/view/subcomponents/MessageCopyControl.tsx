@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 
@@ -51,31 +49,8 @@ const MessageCopyControl = ({
   const [selectedFormat, setSelectedFormat] = useState<CopyFormat>(defaultFormat);
   const [copied, setCopied] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // The dropdown is rendered in a portal so it escapes the chat message's
-  // `contain: paint` box (which would otherwise clip it). Anchor it to the
-  // trigger, flipping above when there isn't room below.
-  const openDropdown = () => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
-      const ESTIMATED_MENU_HEIGHT = 84;
-      const openUp = rect.bottom + ESTIMATED_MENU_HEIGHT + 8 > window.innerHeight;
-      setMenuStyle({
-        position: 'fixed',
-        right: Math.max(8, window.innerWidth - rect.right),
-        zIndex: 1000,
-        ...(openUp
-          ? { bottom: window.innerHeight - rect.top + 4 }
-          : { top: rect.bottom + 4 }),
-      });
-    }
-    setIsDropdownOpen(true);
-  };
 
   const copyFormatOptions: CopyFormatOption[] = useMemo(
     () => [
@@ -108,28 +83,18 @@ const MessageCopyControl = ({
   }, [defaultFormat]);
 
   useEffect(() => {
-    if (!isDropdownOpen) return;
-
-    // Close when clicking outside both the control and the portaled menu.
+    // Close the dropdown when clicking anywhere outside this control.
     const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!isDropdownOpen) return;
       const target = event.target as Node;
-      if (dropdownRef.current?.contains(target) || menuRef.current?.contains(target)) {
-        return;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setIsDropdownOpen(false);
       }
-      setIsDropdownOpen(false);
     };
 
-    // The menu is fixed-positioned; close it if the page scrolls so it can't
-    // detach from the trigger.
-    const closeOnScroll = () => setIsDropdownOpen(false);
-
     window.addEventListener('mousedown', closeOnOutsideClick);
-    window.addEventListener('scroll', closeOnScroll, true);
-    window.addEventListener('resize', closeOnScroll);
     return () => {
       window.removeEventListener('mousedown', closeOnOutsideClick);
-      window.removeEventListener('scroll', closeOnScroll, true);
-      window.removeEventListener('resize', closeOnScroll);
     };
   }, [isDropdownOpen]);
 
@@ -205,9 +170,8 @@ const MessageCopyControl = ({
       {canSelectCopyFormat && (
         <>
           <button
-            ref={triggerRef}
             type="button"
-            onClick={() => (isDropdownOpen ? setIsDropdownOpen(false) : openDropdown())}
+            onClick={() => setIsDropdownOpen((prev) => !prev)}
             className={`rounded px-1 py-0.5 transition-colors ${toneClass}`}
             aria-label={t('copyMessage.selectFormat', { defaultValue: 'Select copy format' })}
             title={t('copyMessage.selectFormat', { defaultValue: 'Select copy format' })}
@@ -222,12 +186,8 @@ const MessageCopyControl = ({
             </svg>
           </button>
 
-          {isDropdownOpen && createPortal(
-            <div
-              ref={menuRef}
-              style={menuStyle}
-              className="min-w-36 rounded-md border border-border bg-popover p-1 shadow-lg"
-            >
+          {isDropdownOpen && (
+            <div className="absolute left-auto top-full z-30 mt-1 min-w-36 rounded-md border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
               {copyFormatOptions.map((option) => {
                 const isSelected = option.format === selectedFormat;
                 return (
@@ -236,16 +196,15 @@ const MessageCopyControl = ({
                     type="button"
                     onClick={() => handleFormatChange(option.format)}
                     className={`block w-full rounded px-2 py-1.5 text-left transition-colors ${isSelected
-                      ? 'bg-accent text-foreground'
-                      : 'text-foreground hover:bg-accent'
+                      ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+                      : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/60'
                       }`}
                   >
                     <span className="block text-xs font-medium">{option.label}</span>
                   </button>
                 );
               })}
-            </div>,
-            document.body,
+            </div>
           )}
         </>
       )}

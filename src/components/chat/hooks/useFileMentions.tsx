@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
-
 import { api } from '../../../utils/api';
 import { escapeRegExp } from '../utils/chatFormatting';
 import type { Project } from '../../../types/app';
@@ -71,9 +70,7 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
 
 
       try {
-        const response = await api.getMentionableFiles(projectId, {
-          signal: abortController.signal,
-        });
+        const response = await api.getFiles(projectId, { signal: abortController.signal });
         if (!response.ok) {
           return;
         }

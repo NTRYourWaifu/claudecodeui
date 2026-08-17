@@ -22,6 +22,8 @@
     "claude-code-ui",
     "cloudcli",
     "codex",
+    "gemini",
+    "gemini-cli",
     "cursor",
     "cursor-cli",
     "anthropic",

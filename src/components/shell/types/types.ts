@@ -1,8 +1,9 @@
 import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
-
 import type { Project, ProjectSession } from '../../../types/app';
+
+export type AuthCopyStatus = 'idle' | 'copied' | 'failed';
 
 export type ShellInitMessage = {
   type: 'init';
@@ -14,7 +15,6 @@ export type ShellInitMessage = {
   rows: number;
   initialCommand: string | null | undefined;
   isPlainShell: boolean;
-  forceRestart?: boolean;
 };
 
 export type ShellResizeMessage = {
@@ -52,6 +52,7 @@ export type ShellSharedRefs = {
   wsRef: MutableRefObject<WebSocket | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
+  authUrlRef: MutableRefObject<string>;
   selectedProjectRef: MutableRefObject<Project | null | undefined>;
   selectedSessionRef: MutableRefObject<ProjectSession | null | undefined>;
   initialCommandRef: MutableRefObject<string | null | undefined>;
@@ -66,6 +67,10 @@ export type UseShellRuntimeResult = {
   isConnected: boolean;
   isInitialized: boolean;
   isConnecting: boolean;
-  connectToShell: (options?: { forceRestart?: boolean }) => void;
-  disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
+  authUrl: string;
+  authUrlVersion: number;
+  connectToShell: () => void;
+  disconnectFromShell: () => void;
+  openAuthUrlInBrowser: (url?: string) => boolean;
+  copyAuthUrlToClipboard: (url?: string) => Promise<boolean>;
 };

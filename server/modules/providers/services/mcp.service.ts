@@ -1,6 +1,17 @@
+import os from 'node:os';
+
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { LLMProvider, McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+
+/** Cursor MCP is not supported on Windows hosts (no Cursor CLI integration). */
+function includeProviderInGlobalMcp(providerId: LLMProvider): boolean {
+  if (providerId === 'cursor' && os.platform() === 'win32') {
+    return false;
+  }
+
+  return true;
+}
 
 
 export const providerMcpService = {
@@ -64,7 +75,7 @@ export const providerMcpService = {
 
     const scope = input.scope ?? 'project';
     const results: Array<{ provider: LLMProvider; created: boolean; error?: string }> = [];
-    const providers = providerRegistry.listProviders();
+    const providers = providerRegistry.listProviders().filter((p) => includeProviderInGlobalMcp(p.id));
     for (const provider of providers) {
       try {
         await provider.mcp.upsertServer({ ...input, scope });
@@ -73,32 +84,6 @@ export const providerMcpService = {
         results.push({
           provider: provider.id,
           created: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      }
-    }
-
-    return results;
-  },
-
-  /**
-   * Removes one MCP server from every provider. Mirrors `addMcpServerToAllProviders`
-   * by iterating the live provider registry, so callers stay in sync with which
-   * providers exist instead of maintaining their own provider list.
-   */
-  async removeMcpServerFromAllProviders(
-    input: { name: string; scope?: McpScope; workspacePath?: string },
-  ): Promise<Array<{ provider: LLMProvider; removed: boolean; error?: string }>> {
-    const results: Array<{ provider: LLMProvider; removed: boolean; error?: string }> = [];
-    const providers = providerRegistry.listProviders();
-    for (const provider of providers) {
-      try {
-        const result = await provider.mcp.removeServer(input);
-        results.push({ provider: provider.id, removed: result.removed });
-      } catch (error) {
-        results.push({
-          provider: provider.id,
-          removed: false,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
       }

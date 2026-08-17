@@ -12,27 +12,23 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
-import type { MarkSessionProcessing, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
-import {
-  clearQueuedMessage,
-  readQueuedMessage,
-  safeLocalStorage,
-  writeQueuedMessage,
-  type QueuedSendOptions,
-} from '../utils/chatStorage';
+import { safeLocalStorage } from '../utils/chatStorage';
 import type {
-  ChatAttachment,
   ChatMessage,
   PendingPermissionRequest,
   PermissionMode,
-  SessionEstablishedContext,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider, ProviderModelOption } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
 import { type SlashCommand, useSlashCommands } from './useSlashCommands';
+
+type PendingViewSession = {
+  sessionId: string | null;
+  startedAt: number;
+};
 
 interface UseChatComposerStateArgs {
   selectedProject: Project | null;
@@ -41,33 +37,28 @@ interface UseChatComposerStateArgs {
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
-  resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
-  /**
-   * Model every send and command carries: the open session's model when there
-   * is one, otherwise the user's per-provider selection.
-   */
-  currentProviderModel: string;
-  currentProviderEffort: string;
+  cursorModel: string;
+  claudeModel: string;
+  codexModel: string;
+  geminiModel: string;
   isLoading: boolean;
-  processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
-  onSessionProcessing?: MarkSessionProcessing;
-  /**
-   * Invoked with the freshly allocated session id when the user sends the
-   * first message of a brand-new conversation. The backend allocates the id
-   * via POST /api/providers/sessions BEFORE the websocket send, so the id is
-   * stable for the conversation's whole lifetime — the consumer navigates to
-   * /session/:id and records it as the current session.
-   */
-  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
+  onSessionActive?: (sessionId?: string | null) => void;
+  onSessionProcessing?: (sessionId?: string | null) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  pendingViewSessionRef: { current: PendingViewSession | null };
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
+  clearMessages: () => void;
+  rewindMessages: (count: number) => void;
+  setIsLoading: (loading: boolean) => void;
+  setCanAbortSession: (canAbort: boolean) => void;
+  setClaudeStatus: (status: { text: string; tokens: number; can_interrupt: boolean } | null) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
 }
@@ -86,128 +77,8 @@ interface CommandExecutionResult {
   hasFileIncludes?: boolean;
 }
 
-export type ModelCommandData = {
-  current?: {
-    provider?: string;
-    providerLabel?: string;
-    model?: string;
-  };
-  available?: Partial<Record<LLMProvider, string[]>>;
-  availableModels?: string[];
-  availableOptions?: ProviderModelOption[];
-  defaultModel?: string;
-};
-
-export type CostCommandData = {
-  tokenUsage?: {
-    used?: number;
-    total?: number;
-  };
-  tokenBreakdown?: {
-    input?: number;
-    output?: number;
-  };
-  provider?: string;
-  model?: string;
-};
-
-export type StatusCommandData = {
-  version?: string;
-  packageName?: string;
-  uptime?: string;
-  model?: string;
-  provider?: string;
-  nodeVersion?: string;
-  platform?: string;
-  pid?: number;
-  memoryUsage?: {
-    rssMb?: number;
-    heapUsedMb?: number;
-    heapTotalMb?: number;
-  };
-};
-
-export type HelpCommandData = {
-  content?: string;
-  format?: string;
-  commands?: Array<{
-    name: string;
-    description?: string;
-    namespace?: string;
-  }>;
-};
-
-export type CommandModalKind = 'help' | 'models' | 'cost' | 'status';
-
-export type CommandModalPayload = {
-  kind: CommandModalKind;
-  data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData;
-};
-
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
-};
-
-const MAX_ATTACHMENT_COUNT = 10;
-const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
-
-const isImageAttachment = (attachment: ChatAttachment) => {
-  if (attachment.mimeType?.startsWith('image/')) return true;
-  return /\.(gif|jpe?g|png|svg|webp)$/i.test(attachment.path || attachment.name || '');
-};
-
-const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
-  const response = await authenticatedFetch('/api/assets/files', {
-    method: 'POST',
-    headers: {},
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Failed to upload files');
-  }
-
-  const result = await response.json();
-  if (!Array.isArray(result.attachments) || result.attachments.length !== files.length) {
-    throw new Error('File upload returned an incomplete result');
-  }
-  return result.attachments;
-};
-
-export type QueuedDraft = {
-  content: string;
-  /** Browser files retained while this composer stays mounted, for editing. */
-  attachments: File[];
-  /** JSON-safe descriptors uploaded when the message is queued. */
-  uploadedAttachments?: unknown[];
-  /**
-   * Send options snapshotted at queue time. Persisted with the draft so the
-   * app-level auto-send can dispatch the message with the right model and
-   * permission settings while another session is being viewed.
-   */
-  options?: QueuedSendOptions;
-};
-
-const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
-  const saved = readQueuedMessage(sessionKey);
-  return saved
-    ? {
-        content: saved.content,
-        attachments: [],
-        uploadedAttachments: saved.attachments ?? saved.images,
-        options: saved.options,
-      }
-    : null;
 };
 
 const getNotificationSessionSummary = (
@@ -235,22 +106,28 @@ export function useChatComposerState({
   provider,
   permissionMode,
   cyclePermissionMode,
-  resolvePermissionModeForProvider,
-  currentProviderModel,
-  currentProviderEffort,
+  cursorModel,
+  claudeModel,
+  codexModel,
+  geminiModel,
   isLoading,
-  processingSessions,
   canAbortSession,
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
+  onSessionActive,
   onSessionProcessing,
-  onSessionEstablished,
   onInputFocusChange,
   onFileOpen,
   onShowSettings,
+  pendingViewSessionRef,
   scrollToBottom,
   addMessage,
+  clearMessages,
+  rewindMessages,
+  setIsLoading,
+  setCanAbortSession,
+  setClaudeStatus,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
@@ -262,76 +139,60 @@ export function useChatComposerState({
     }
     return '';
   });
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [uploadingFiles, setUploadingFiles] = useState<Map<string, number>>(new Map());
-  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
+  const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
+  const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return safeLocalStorage.getItem('claude-thinking-enabled') === '1';
+  });
+  const [effort, setEffort] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'high';
+    return safeLocalStorage.getItem('claude-effort') || 'high';
+  });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
-  const textareaLineHeightRef = useRef<number | null>(null);
-  const lastAutosizedInputRef = useRef<string | null>(null);
   const handleSubmitRef = useRef<
-    ((
-      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
-      queuedSubmission?: QueuedDraft,
-    ) => Promise<void>) | null
+    ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
   const selectedProjectId = selectedProject?.projectId;
-  // Prefer the stable backend-allocated id (selectedSession.id) but fall back
-  // to currentSessionId for a just-established session that hasn't been
-  // handed back to the parent's `selectedSession` prop yet.
-  const sessionKey = selectedSession?.id || currentSessionId || null;
-  const sessionKeyRef = useRef(sessionKey);
-  const processingSessionsRef = useRef<SessionActivityMap | undefined>(processingSessions);
-  sessionKeyRef.current = sessionKey;
-  processingSessionsRef.current = processingSessions;
-
-  const [queuedDraft, setQueuedDraft] = useState<QueuedDraft | null>(() => {
-    if (typeof window === 'undefined' || !sessionKey) {
-      return null;
-    }
-    return restoreQueuedDraft(sessionKey);
-  });
-  // Which session the in-memory `queuedDraft` belongs to. On a session switch
-  // there is one commit where `sessionKey` already points at the new session
-  // while `queuedDraft` still holds the old session's draft; the persistence
-  // effect must not write across that gap.
-  const queuedDraftSessionRef = useRef<string | null>(sessionKey);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
       const { action, data } = result;
       switch (action) {
+        case 'clear':
+          clearMessages();
+          break;
+
         case 'help':
-          setCommandModalPayload({
-            kind: 'help',
-            data: (data || {}) as HelpCommandData,
+          addMessage({
+            type: 'assistant',
+            content: data.content,
+            timestamp: Date.now(),
           });
           break;
 
-        case 'models':
-          setCommandModalPayload({
-            kind: 'models',
-            data: (data || {}) as ModelCommandData,
+        case 'model':
+          addMessage({
+            type: 'assistant',
+            content: `**Current Model**: ${data.current.model}\n\n**Available Models**:\n\nClaude: ${data.available.claude.join(', ')}\n\nCursor: ${data.available.cursor.join(', ')}`,
+            timestamp: Date.now(),
           });
           break;
 
         case 'cost': {
-          setCommandModalPayload({
-            kind: 'cost',
-            data: (data || {}) as CostCommandData,
-          });
+          const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
+          addMessage({ type: 'assistant', content: costMessage, timestamp: Date.now() });
           break;
         }
 
         case 'status': {
-          setCommandModalPayload({
-            kind: 'status',
-            data: (data || {}) as StatusCommandData,
-          });
+          const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
+          addMessage({ type: 'assistant', content: statusMessage, timestamp: Date.now() });
           break;
         }
 
@@ -358,16 +219,53 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
+        case 'rewind':
+          if (data.error) {
+            addMessage({
+              type: 'assistant',
+              content: `Warning: ${data.message}`,
+              timestamp: Date.now(),
+            });
+          } else {
+            rewindMessages(data.steps * 2);
+            addMessage({
+              type: 'assistant',
+              content: `Rewound ${data.steps} step(s). ${data.message}`,
+              timestamp: Date.now(),
+            });
+          }
+          break;
+
+        // /context /usage 之類純資訊指令：直接以 assistant 訊息顯示
+        case 'info':
+          addMessage({
+            type: 'assistant',
+            content: data.message,
+            timestamp: Date.now(),
+          });
+          break;
+
+        // /compact /init /review /security-review 等：把 server 回傳的 prompt 灌進輸入框並 focus
+        case 'inject-prompt':
+          if (typeof data?.prompt === 'string') {
+            setInput(data.prompt);
+            inputValueRef.current = data.prompt;
+            // 桌面才 focus（手機 focus 會彈鍵盤遮畫面）
+            const isTouch =
+              typeof window !== 'undefined' &&
+              (navigator.maxTouchPoints > 0 || window.matchMedia?.('(pointer: coarse)').matches);
+            if (!isTouch) {
+              setTimeout(() => textareaRef.current?.focus(), 0);
+            }
+          }
+          break;
+
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages, setInput],
   );
-
-  const closeCommandModal = useCallback(() => {
-    setCommandModalPayload(null);
-  }, []);
 
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
     const { content, hasBashCommands } = result;
@@ -399,7 +297,7 @@ export function useChatComposerState({
   }, [addMessage]);
 
   const executeCommand = useCallback(
-    async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
+    async (command: SlashCommand, rawInput?: string) => {
       if (!command || !selectedProject) {
         return;
       }
@@ -415,9 +313,9 @@ export function useChatComposerState({
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
           projectId: selectedProject.projectId,
-          sessionId: currentSessionId || selectedSession?.id || null,
+          sessionId: currentSessionId,
           provider,
-          model: currentProviderModel,
+          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -448,7 +346,8 @@ export function useChatComposerState({
         const result = (await response.json()) as CommandExecutionResult;
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
-          if (!options?.preserveInput) {
+          // inject-prompt 已經把 prompt 寫進 input，不能清掉
+          if (result.action !== 'inject-prompt') {
             setInput('');
             inputValueRef.current = '';
           }
@@ -466,31 +365,20 @@ export function useChatComposerState({
       }
     },
     [
-      currentProviderModel,
+      claudeModel,
+      codexModel,
       currentSessionId,
+      cursorModel,
+      geminiModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
       provider,
       selectedProject,
-      selectedSession?.id,
       addMessage,
       tokenBudget,
     ],
   );
-
-  const showCostModal = useCallback(() => {
-    executeCommand(
-      {
-        name: '/cost',
-        description: 'Display token usage information',
-        namespace: 'builtin',
-        metadata: { type: 'builtin' },
-      } as SlashCommand,
-      '/cost',
-      { preserveInput: true },
-    );
-  }, [executeCommand]);
 
   const {
     slashCommands,
@@ -537,23 +425,7 @@ export function useChatComposerState({
     inputHighlightRef.current.scrollLeft = target.scrollLeft;
   }, []);
 
-  const resizeTextarea = useCallback((target: HTMLTextAreaElement) => {
-    target.style.height = 'auto';
-    const nextHeight = Math.max(22, target.scrollHeight);
-    target.style.height = `${nextHeight}px`;
-
-    let lineHeight = textareaLineHeightRef.current;
-    if (!lineHeight) {
-      lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
-      textareaLineHeightRef.current = Number.isFinite(lineHeight) ? lineHeight : 24;
-    }
-
-    const expanded = nextHeight > (textareaLineHeightRef.current || 24) * 2;
-    setIsTextareaExpanded((previous) => previous === expanded ? previous : expanded);
-    lastAutosizedInputRef.current = target.value;
-  }, []);
-
-  const handleAttachmentFiles = useCallback((files: File[]) => {
+  const handleImageFiles = useCallback((files: File[]) => {
     const validFiles = files.filter((file) => {
       try {
         if (!file || typeof file !== 'object') {
@@ -561,11 +433,15 @@ export function useChatComposerState({
           return false;
         }
 
-        if (file.size > MAX_ATTACHMENT_SIZE) {
+        if (!file.type || !file.type.startsWith('image/')) {
+          return false;
+        }
+
+        if (!file.size || file.size > 5 * 1024 * 1024) {
           const fileName = file.name || 'Unknown file';
-          setFileErrors((previous) => {
+          setImageErrors((previous) => {
             const next = new Map(previous);
-            next.set(fileName, 'File too large (max 10MB)');
+            next.set(fileName, 'File too large (max 5MB)');
             return next;
           });
           return false;
@@ -579,7 +455,7 @@ export function useChatComposerState({
     });
 
     if (validFiles.length > 0) {
-      setAttachedFiles((previous) => [...previous, ...validFiles].slice(0, MAX_ATTACHMENT_COUNT));
+      setAttachedImages((previous) => [...previous, ...validFiles].slice(0, 5));
     }
   }, []);
 
@@ -593,7 +469,7 @@ export function useChatComposerState({
         }
         const file = item.getAsFile();
         if (file) {
-          handleAttachmentFiles([file]);
+          handleImageFiles([file]);
         }
       });
 
@@ -601,201 +477,47 @@ export function useChatComposerState({
         const files = Array.from(event.clipboardData.files);
         const imageFiles = files.filter((file) => file.type.startsWith('image/'));
         if (imageFiles.length > 0) {
-          handleAttachmentFiles(imageFiles);
+          handleImageFiles(imageFiles);
         }
       }
     },
-    [handleAttachmentFiles],
+    [handleImageFiles],
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    maxSize: MAX_ATTACHMENT_SIZE,
-    maxFiles: MAX_ATTACHMENT_COUNT,
-    onDrop: handleAttachmentFiles,
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
+    },
+    maxSize: 5 * 1024 * 1024,
+    maxFiles: 5,
+    onDrop: handleImageFiles,
     noClick: true,
     noKeyboard: true,
   });
 
-  // Snapshot of everything `chat.send` needs beyond the text itself. Built at
-  // send time for immediate sends and at queue time for queued ones, so a
-  // queued message keeps the provider settings it was composed under even if
-  // it is later dispatched outside this composer (app-level auto-send).
-  const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
-    const getToolsSettings = () => {
-      try {
-        const settingsKey =
-          provider === 'cursor'
-            ? 'cursor-tools-settings'
-            : provider === 'codex'
-              ? 'codex-settings'
-              : provider === 'opencode'
-                  ? 'opencode-settings'
-                : 'claude-settings';
-        const savedSettings = safeLocalStorage.getItem(settingsKey);
-        if (savedSettings) {
-          return JSON.parse(savedSettings);
-        }
-      } catch (error) {
-        console.error('Error loading tools settings:', error);
-      }
-
-      return {
-        allowedTools: [],
-        disallowedTools: [],
-        skipPermissions: false,
-      };
-    };
-
-    const toolsSettings = getToolsSettings();
-
-    return {
-      model: currentProviderModel,
-      effort: currentProviderEffort,
-      permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
-      toolsSettings,
-      skipPermissions: toolsSettings?.skipPermissions || false,
-      sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
-    };
-  }, [
-    currentProviderEffort,
-    currentProviderModel,
-    permissionMode,
-    provider,
-    resolvePermissionModeForProvider,
-    selectedSession,
-  ]);
-
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
-      queuedSubmission?: QueuedDraft,
     ) => {
       event.preventDefault();
-      const currentInput = queuedSubmission?.content ?? inputValueRef.current;
-      const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
-      const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
-      if (
-        (
-          !currentInput.trim()
-          && currentAttachments.length === 0
-          && previouslyUploadedAttachments.length === 0
-        )
-        || !selectedProject
-      ) {
-        return;
-      }
-
-      // A turn is already in flight: stash this message instead of sending it.
-      // Upload attached files now so the queued record contains durable image
-      // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
-        // A run can restart in the tiny gap between scheduling and flushing a
-        // queued submission. Put the same durable draft back without uploading
-        // its files again.
-        if (queuedSubmission) {
-          queuedDraftSessionRef.current = sessionKey;
-          setQueuedDraft(queuedSubmission);
-          return;
-        }
-
-        const queuedOptions = buildSendOptions(currentInput);
-        const queuedSessionKey = sessionKey;
-        let uploadedAttachments: unknown[] = [];
-        try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Queued file upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        const durableDraft: QueuedDraft = {
-          content: currentInput,
-          attachments: currentAttachments,
-          uploadedAttachments,
-          options: queuedOptions,
-        };
-        if (queuedSessionKey) {
-          // Write the claim ticket synchronously after upload; this closes the
-          // gap before React's persistence effect runs.
-          writeQueuedMessage(queuedSessionKey, {
-            content: durableDraft.content,
-            options: durableDraft.options,
-            attachments: durableDraft.uploadedAttachments,
-          });
-        }
-
-        // The upload is asynchronous. If the user changed sessions while it
-        // was running, persist/send against the session where Queue was
-        // pressed rather than putting the draft into the newly opened chat.
-        if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
-          if (
-            processingSessionsRef.current
-            && !processingSessionsRef.current.has(queuedSessionKey)
-          ) {
-            clearQueuedMessage(queuedSessionKey);
-            sendMessage({
-              type: 'chat.send',
-              sessionId: queuedSessionKey,
-              content: durableDraft.content,
-              options: {
-                ...(durableDraft.options ?? {}),
-                attachments: durableDraft.uploadedAttachments ?? [],
-              },
-            });
-            onSessionProcessing?.(queuedSessionKey, { statusText: null, canInterrupt: true });
-          }
-          return;
-        }
-
-        queuedDraftSessionRef.current = queuedSessionKey;
-        setQueuedDraft(durableDraft);
-        setInput('');
-        inputValueRef.current = '';
-        setAttachedFiles([]);
-        setUploadingFiles(new Map());
-        setFileErrors(new Map());
-        resetCommandMenuState();
-        setIsTextareaExpanded(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-        }
-        // selectedProject is guaranteed by the guard at the top of handleSubmit.
-        safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
+      const currentInput = inputValueRef.current;
+      if (!currentInput.trim() || isLoading || !selectedProject) {
         return;
       }
 
       // Intercept slash commands only when "/" is the first input character.
-      // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
       const commandInput = currentInput.trimEnd();
-      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
+      if (commandInput.startsWith('/')) {
         const firstSpace = commandInput.indexOf(' ');
-        const commandName = isHelpAlias
-          ? '/help'
-          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
-        const matchedCommand =
-          slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
-          (commandName === '/help'
-            ? ({
-                name: '/help',
-                description: 'Show help documentation for Claude Code',
-                namespace: 'builtin',
-                metadata: { type: 'builtin' },
-              } as SlashCommand)
-            : undefined);
+        const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand && matchedCommand.type !== 'skill') {
-          executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
+          executeCommand(matchedCommand, commandInput);
           setInput('');
           inputValueRef.current = '';
-          setAttachedFiles([]);
-          setUploadingFiles(new Map());
-          setFileErrors(new Map());
+          setAttachedImages([]);
+          setUploadingImages(new Map());
+          setImageErrors(new Map());
           resetCommandMenuState();
           setIsTextareaExpanded(false);
           if (textareaRef.current) {
@@ -807,121 +529,176 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
-      let uploadedAttachments = previouslyUploadedAttachments;
-      if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
-        try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('File upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
-      }
-
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
-      // The conversation always has a stable backend-allocated session id
-      // BEFORE the first websocket send: brand-new chats allocate one here
-      // via the session gateway. There is no client-visible session-id
-      // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
-      if (!targetSessionId) {
-        let createdSessionName = sessionSummary;
-        try {
-          const response = await authenticatedFetch('/api/providers/sessions', {
-            method: 'POST',
-            body: JSON.stringify({
-              provider,
-              projectPath: resolvedProjectPath,
-              initialMessage: messageContent,
-            }),
-          });
-          if (!response.ok) {
-            throw new Error(`Failed to create session (${response.status})`);
-          }
-          const body = await response.json();
-          targetSessionId = body?.data?.sessionId || null;
-          // A blank server name would leave the session unlabeled, so the local
-          // summary stays the fallback unless a real name comes back.
-          const returnedSessionName = typeof body?.data?.sessionName === 'string'
-            ? body.data.sessionName.trim()
-            : '';
-          if (returnedSessionName) {
-            createdSessionName = returnedSessionName;
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Session creation failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to start a new session: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        if (!targetSessionId) {
-          addMessage({
-            type: 'error',
-            content: 'Failed to start a new session: no session id returned.',
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        onSessionEstablished?.(targetSessionId, {
-          provider,
-          project: selectedProject,
-          summary: createdSessionName,
+      let uploadedImages: unknown[] = [];
+      if (attachedImages.length > 0) {
+        const formData = new FormData();
+        attachedImages.forEach((file) => {
+          formData.append('images', file);
         });
+
+        try {
+          const response = await authenticatedFetch(`/api/projects/${selectedProject.projectId}/upload-images`, {
+            method: 'POST',
+            headers: {},
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to upload images');
+          }
+
+          const result = await response.json();
+          uploadedImages = result.images;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Image upload failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to upload images: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
       }
 
-      const attachmentRecords = uploadedAttachments as ChatAttachment[];
+      const effectiveSessionId =
+        currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+
       const userMessage: ChatMessage = {
         type: 'user',
         content: currentInput,
-        images: attachmentRecords.filter(isImageAttachment),
-        files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+        images: uploadedImages as any,
         timestamp: new Date(),
       };
 
       addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
+      setIsLoading(true); // Processing banner starts
+      setCanAbortSession(true);
+      setClaudeStatus({
+        text: 'Processing',
+        tokens: 0,
+        can_interrupt: true,
       });
 
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
 
-      // One message shape for every provider. The backend resolves the
-      // provider, project path, and provider-native resume id from the
-      // session row; `options` only carries composer-level preferences.
-      sendMessage({
-        type: 'chat.send',
-        sessionId: targetSessionId,
-        content: messageContent,
-        options: {
-          ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
-          attachments: uploadedAttachments,
-        },
-      });
+      if (!effectiveSessionId && !selectedSession?.id) {
+        if (typeof window !== 'undefined') {
+          // Reset stale pending IDs from previous interrupted runs before creating a new one.
+          sessionStorage.removeItem('pendingSessionId');
+        }
+        // For new sessions we intentionally keep this as `null` until the backend
+        // emits `session_created` with the canonical provider session id.
+        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+      }
+      if (effectiveSessionId) {
+        onSessionActive?.(effectiveSessionId);
+        onSessionProcessing?.(effectiveSessionId);
+      }
+
+      const getToolsSettings = () => {
+        try {
+          const settingsKey =
+            provider === 'cursor'
+              ? 'cursor-tools-settings'
+              : provider === 'codex'
+                ? 'codex-settings'
+                : provider === 'gemini'
+                  ? 'gemini-settings'
+                  : 'claude-settings';
+          const savedSettings = safeLocalStorage.getItem(settingsKey);
+          if (savedSettings) {
+            return JSON.parse(savedSettings);
+          }
+        } catch (error) {
+          console.error('Error loading tools settings:', error);
+        }
+
+        return {
+          allowedTools: [],
+          disallowedTools: [],
+          skipPermissions: false,
+        };
+      };
+
+      const toolsSettings = getToolsSettings();
+      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
+
+      if (provider === 'cursor') {
+        sendMessage({
+          type: 'cursor-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: cursorModel,
+            skipPermissions: toolsSettings?.skipPermissions || false,
+            sessionSummary,
+            toolsSettings,
+          },
+        });
+      } else if (provider === 'codex') {
+        sendMessage({
+          type: 'codex-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: codexModel,
+            sessionSummary,
+            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
+          },
+        });
+      } else if (provider === 'gemini') {
+        sendMessage({
+          type: 'gemini-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: geminiModel,
+            sessionSummary,
+            permissionMode,
+            toolsSettings,
+          },
+        });
+      } else {
+        sendMessage({
+          type: 'claude-command',
+          command: messageContent,
+          options: {
+            projectPath: resolvedProjectPath,
+            cwd: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            toolsSettings,
+            permissionMode,
+            model: claudeModel,
+            thinking: thinkingEnabled,
+            effort,
+            sessionSummary,
+            images: uploadedImages,
+          },
+        });
+      }
 
       setInput('');
       inputValueRef.current = '';
       resetCommandMenuState();
-      setAttachedFiles([]);
-      setUploadingFiles(new Map());
-      setFileErrors(new Map());
+      setAttachedImages([]);
+      setUploadingImages(new Map());
+      setImageErrors(new Map());
       setIsTextareaExpanded(false);
 
       if (textareaRef.current) {
@@ -932,98 +709,37 @@ export function useChatComposerState({
     },
     [
       selectedSession,
-      attachedFiles,
-      buildSendOptions,
+      attachedImages,
+      claudeModel,
+      codexModel,
       currentSessionId,
+      cursorModel,
       executeCommand,
+      geminiModel,
       isLoading,
+      onSessionActive,
       onSessionProcessing,
-      onSessionEstablished,
+      pendingViewSessionRef,
+      permissionMode,
       provider,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
       sendMessage,
-      sessionKey,
+      setCanAbortSession,
       addMessage,
+      setClaudeStatus,
+      setIsLoading,
       setIsUserScrolledUp,
       slashCommands,
+      thinkingEnabled,
+      effort,
     ],
   );
 
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
-
-  // Once the in-flight turn ends, replay the queued draft through the normal
-  // submit path. The draft itself is passed directly so submission never
-  // depends on React committing restored attachment state first.
-  const wasLoadingRef = useRef(isLoading);
-  const flushSessionKeyRef = useRef(sessionKey);
-  useEffect(() => {
-    const wasLoading = wasLoadingRef.current;
-    wasLoadingRef.current = isLoading;
-
-    // A session switch changes which session `isLoading` describes, so this
-    // transition says nothing about the queued draft's own session. Never
-    // flush across it — the swap effect below replaces `queuedDraft` with the
-    // new session's saved draft right after this.
-    if (flushSessionKeyRef.current !== sessionKey) {
-      flushSessionKeyRef.current = sessionKey;
-      return;
-    }
-
-    if (isLoading || !queuedDraft) {
-      return;
-    }
-
-    // Turn just ended in this session: flush immediately. Otherwise this is a
-    // saved draft restored into an apparently idle session — hold it briefly
-    // so the `chat_subscribed` ack can flip `isLoading` if a run is actually
-    // still live (the cleanup below cancels the send in that case).
-    const delay = wasLoading ? 0 : 750;
-    const timer = setTimeout(() => {
-      // The saved key is the claim ticket shared with the app-level auto-send
-      // (which handles sessions that finish while not viewed). If it's gone,
-      // the message was already dispatched — don't send it twice.
-      if (sessionKey && !readQueuedMessage(sessionKey)) {
-        setQueuedDraft(null);
-        return;
-      }
-      setQueuedDraft(null);
-      setInput(queuedDraft.content);
-      inputValueRef.current = queuedDraft.content;
-      setAttachedFiles(queuedDraft.attachments);
-      handleSubmitRef.current?.(createFakeSubmitEvent(), queuedDraft);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [isLoading, queuedDraft, sessionKey, setInput]);
-
-  const editQueuedDraft = useCallback(() => {
-    if (!queuedDraft) {
-      return;
-    }
-    setQueuedDraft(null);
-    setInput(queuedDraft.content);
-    inputValueRef.current = queuedDraft.content;
-    setAttachedFiles(queuedDraft.attachments);
-    textareaRef.current?.focus();
-  }, [queuedDraft]);
-
-  const deleteQueuedDraft = useCallback(() => {
-    setQueuedDraft(null);
-  }, []);
-
-  // A voice transcript either fills the input (to edit before sending) or, when the
-  // user tapped "stop and send", is submitted straight away. Mirror the value into
-  // inputValueRef synchronously so handleSubmit reads the new text, not the stale state.
-  const handleVoiceTranscript = useCallback((text: string, send?: boolean) => {
-    const base = inputValueRef.current.trim();
-    const next = base ? `${base} ${text}` : text;
-    setInput(next);
-    inputValueRef.current = next;
-    if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
-  }, [setInput]);
 
   useEffect(() => {
     inputValueRef.current = input;
@@ -1052,52 +768,17 @@ export function useChatComposerState({
     }
   }, [input, selectedProjectId]);
 
-  // Persist the queued draft under its session's key. Must be defined BEFORE
-  // the swap effect below: on a session switch there is one commit where
-  // `sessionKey` already points at the new session while `queuedDraft` (and
-  // the owner ref) still describe the old one — the ref mismatch makes this
-  // effect skip that commit instead of writing/clearing across sessions.
-  useEffect(() => {
-    if (!sessionKey || queuedDraftSessionRef.current !== sessionKey) {
-      return;
-    }
-    if (
-      queuedDraft
-      && (queuedDraft.content.trim() || (queuedDraft.uploadedAttachments?.length ?? 0) > 0)
-    ) {
-      writeQueuedMessage(sessionKey, {
-        content: queuedDraft.content,
-        options: queuedDraft.options,
-        attachments: queuedDraft.uploadedAttachments,
-      });
-    } else {
-      clearQueuedMessage(sessionKey);
-    }
-  }, [queuedDraft, sessionKey]);
-
-  // Switching sessions swaps in that session's queued draft. Browser File
-  // objects are local to the mounted composer, while their already-uploaded
-  // descriptors restore from storage and remain sendable.
-  useEffect(() => {
-    queuedDraftSessionRef.current = sessionKey;
-    if (!sessionKey) {
-      setQueuedDraft(null);
-      return;
-    }
-    setQueuedDraft(restoreQueuedDraft(sessionKey));
-  }, [sessionKey]);
-
   useEffect(() => {
     if (!textareaRef.current) {
       return;
     }
-    if (lastAutosizedInputRef.current === input) {
-      return;
-    }
-    // Re-run for restored drafts and programmatic input changes. User typing is
-    // already resized in onInput, so this avoids doing the same forced layout twice.
-    resizeTextarea(textareaRef.current);
-  }, [input, resizeTextarea]);
+    // Re-run when input changes so restored drafts get the same autosize behavior as typed text.
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.max(22, textareaRef.current.scrollHeight)}px`;
+    const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
+    const expanded = textareaRef.current.scrollHeight > lineHeight * 2;
+    setIsTextareaExpanded(expanded);
+  }, [input]);
 
   useEffect(() => {
     if (!textareaRef.current || input.trim()) {
@@ -1179,11 +860,15 @@ export function useChatComposerState({
   const handleTextareaInput = useCallback(
     (event: FormEvent<HTMLTextAreaElement>) => {
       const target = event.currentTarget;
-      resizeTextarea(target);
+      target.style.height = 'auto';
+      target.style.height = `${Math.max(22, target.scrollHeight)}px`;
       setCursorPosition(target.selectionStart);
       syncInputOverlayScroll(target);
+
+      const lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
+      setIsTextareaExpanded(target.scrollHeight > lineHeight * 2);
     },
-    [resizeTextarea, setCursorPosition, syncInputOverlayScroll],
+    [setCursorPosition, syncInputOverlayScroll],
   );
 
   const handleClearInput = useCallback(() => {
@@ -1202,19 +887,33 @@ export function useChatComposerState({
       return;
     }
 
-    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    const pendingSessionId =
+      typeof window !== 'undefined' ? sessionStorage.getItem('pendingSessionId') : null;
+    const cursorSessionId =
+      typeof window !== 'undefined' ? sessionStorage.getItem('cursorSessionId') : null;
+
+    const candidateSessionIds = [
+      currentSessionId,
+      pendingViewSessionRef.current?.sessionId || null,
+      pendingSessionId,
+      provider === 'cursor' ? cursorSessionId : null,
+      selectedSession?.id || null,
+    ];
+
+    const targetSessionId =
+      candidateSessionIds.find((sessionId) => Boolean(sessionId)) || null;
+
     if (!targetSessionId) {
-      console.warn('Abort requested but no session ID is available.');
+      console.warn('Abort requested but no concrete session ID is available yet.');
       return;
     }
 
-    // The backend resolves the provider from the session row, so no provider
-    // field is needed here.
     sendMessage({
-      type: 'chat.abort',
+      type: 'abort-session',
       sessionId: targetSessionId,
+      provider,
     });
-  }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
+  }, [canAbortSession, currentSessionId, pendingViewSessionRef, provider, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
@@ -1239,7 +938,7 @@ export function useChatComposerState({
 
       validIds.forEach((requestId) => {
         sendMessage({
-          type: 'chat.permission-response',
+          type: 'claude-permission-response',
           requestId,
           allow: Boolean(decision?.allow),
           updatedInput: decision?.updatedInput,
@@ -1248,11 +947,15 @@ export function useChatComposerState({
         });
       });
 
-      setPendingPermissionRequests((previous) =>
-        previous.filter((request) => !validIds.includes(request.requestId)),
-      );
+      setPendingPermissionRequests((previous) => {
+        const next = previous.filter((request) => !validIds.includes(request.requestId));
+        if (next.length === 0) {
+          setClaudeStatus(null);
+        }
+        return next;
+      });
     },
-    [sendMessage, setPendingPermissionRequests],
+    [sendMessage, setClaudeStatus, setPendingPermissionRequests],
   );
 
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -1265,12 +968,26 @@ export function useChatComposerState({
     [onInputFocusChange],
   );
 
+  const setThinkingEnabledPersist = useCallback((next: boolean) => {
+    setThinkingEnabled(next);
+    safeLocalStorage.setItem('claude-thinking-enabled', next ? '1' : '0');
+  }, []);
+
+  const setEffortPersist = useCallback((next: string) => {
+    setEffort(next);
+    safeLocalStorage.setItem('claude-effort', next);
+  }, []);
+
   return {
     input,
     setInput,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
+    thinkingEnabled,
+    setThinkingEnabled: setThinkingEnabledPersist,
+    effort,
+    setEffort: setEffortPersist,
     slashCommandsCount,
     filteredCommands,
     frequentCommands,
@@ -1285,19 +1002,15 @@ export function useChatComposerState({
     selectedFileIndex,
     renderInputWithMentions,
     selectFile,
-    attachedFiles,
-    setAttachedFiles,
-    uploadingFiles,
-    fileErrors,
+    attachedImages,
+    setAttachedImages,
+    uploadingImages,
+    imageErrors,
     getRootProps,
     getInputProps,
     isDragActive,
-    openAttachmentPicker: open,
+    openImagePicker: open,
     handleSubmit,
-    queuedDraft,
-    editQueuedDraft,
-    deleteQueuedDraft,
-    handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -1310,8 +1023,5 @@ export function useChatComposerState({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
-    commandModalPayload,
-    closeCommandModal,
-    showCostModal,
   };
 }

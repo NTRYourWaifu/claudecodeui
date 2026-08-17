@@ -6,19 +6,12 @@ import { getChangedFileCount } from '../utils/gitPanelUtils';
 import ChangesView from '../view/changes/ChangesView';
 import HistoryView from '../view/history/HistoryView';
 import BranchesView from '../view/branches/BranchesView';
-import WorktreesView from '../view/worktrees/WorktreesView';
 import GitPanelHeader from '../view/GitPanelHeader';
 import GitRepositoryErrorState from '../view/GitRepositoryErrorState';
 import GitViewTabs from '../view/GitViewTabs';
 import ConfirmActionModal from '../view/modals/ConfirmActionModal';
 
-export default function GitPanel({
-  selectedProject,
-  isMobile = false,
-  onFileOpen,
-  onProjectSelect,
-  onProjectsRefresh,
-}: GitPanelProps) {
+export default function GitPanel({ selectedProject, isMobile = false, onFileOpen }: GitPanelProps) {
   const [activeView, setActiveView] = useState<GitPanelView>('changes');
   const [wrapText, setWrapText] = useState(true);
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
@@ -28,7 +21,6 @@ export default function GitPanel({
     gitStatus,
     gitDiff,
     isLoading,
-    isLoadingCommits,
     currentBranch,
     branches,
     localBranches,
@@ -42,7 +34,6 @@ export default function GitPanel({
     isPushing,
     isPublishing,
     isCreatingInitialCommit,
-    isInitializingRepository,
     operationError,
     clearOperationError,
     refreshAll,
@@ -55,12 +46,10 @@ export default function GitPanel({
     handlePublish,
     discardChanges,
     deleteUntrackedFile,
-    stageFiles,
-    unstageFiles,
     fetchCommitDiff,
+    generateCommitMessage,
     commitChanges,
     createInitialCommit,
-    initRepository,
     openFile,
   } = useGitPanelController({
     selectedProject,
@@ -87,9 +76,6 @@ export default function GitPanel({
   }, [confirmAction]);
 
   const changeCount = getChangedFileCount(gitStatus);
-  // Without a repository the branch/fetch/refresh header controls are all
-  // meaningless — hide the whole header and let the init state own the panel.
-  const isMissingRepository = Boolean(gitStatus?.notGitRepository);
 
   if (!selectedProject) {
     return (
@@ -101,45 +87,33 @@ export default function GitPanel({
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {!isMissingRepository && (
-        <GitPanelHeader
-          isMobile={isMobile}
-          currentBranch={currentBranch}
-          branches={branches}
-          remoteStatus={remoteStatus}
-          isLoading={isLoading}
-          isCreatingBranch={isCreatingBranch}
-          isFetching={isFetching}
-          isPulling={isPulling}
-          isPushing={isPushing}
-          isPublishing={isPublishing}
-          isRevertingLocalCommit={isRevertingLocalCommit}
-          operationError={operationError}
-          onRefresh={refreshAll}
-          onRevertLocalCommit={revertLatestLocalCommit}
-          onSwitchBranch={switchBranch}
-          onCreateBranch={createBranch}
-          onFetch={handleFetch}
-          onPull={handlePull}
-          onPush={handlePush}
-          onPublish={handlePublish}
-          onClearError={clearOperationError}
-          onRequestConfirmation={setConfirmAction}
-        />
-      )}
+      <GitPanelHeader
+        isMobile={isMobile}
+        currentBranch={currentBranch}
+        branches={branches}
+        remoteStatus={remoteStatus}
+        isLoading={isLoading}
+        isCreatingBranch={isCreatingBranch}
+        isFetching={isFetching}
+        isPulling={isPulling}
+        isPushing={isPushing}
+        isPublishing={isPublishing}
+        isRevertingLocalCommit={isRevertingLocalCommit}
+        operationError={operationError}
+        onRefresh={refreshAll}
+        onRevertLocalCommit={revertLatestLocalCommit}
+        onSwitchBranch={switchBranch}
+        onCreateBranch={createBranch}
+        onFetch={handleFetch}
+        onPull={handlePull}
+        onPush={handlePush}
+        onPublish={handlePublish}
+        onClearError={clearOperationError}
+        onRequestConfirmation={setConfirmAction}
+      />
 
       {gitStatus?.error ? (
-        <GitRepositoryErrorState
-          error={gitStatus.error}
-          details={gitStatus.details}
-          canInitRepository={isMissingRepository}
-          isInitializingRepository={isInitializingRepository}
-          initError={isMissingRepository ? operationError : null}
-          onInitRepository={() => {
-            clearOperationError();
-            void initRepository();
-          }}
-        />
+        <GitRepositoryErrorState error={gitStatus.error} details={gitStatus.details} />
       ) : (
         <>
           <GitViewTabs
@@ -164,9 +138,8 @@ export default function GitPanel({
               onOpenFile={openFile}
               onDiscardFile={discardChanges}
               onDeleteFile={deleteUntrackedFile}
-              onStageFiles={stageFiles}
-              onUnstageFiles={unstageFiles}
               onCommitChanges={commitChanges}
+              onGenerateCommitMessage={generateCommitMessage}
               onRequestConfirmation={setConfirmAction}
               onExpandedFilesChange={setHasExpandedFiles}
             />
@@ -175,25 +148,11 @@ export default function GitPanel({
           {activeView === 'history' && (
             <HistoryView
               isMobile={isMobile}
-              // Treat an in-flight commits request as loading only while the
-              // list is empty, so "No commits found" never flashes before the
-              // first response and refetches don't blank an existing list.
-              isLoading={isLoading || (recentCommits.length === 0 && isLoadingCommits)}
+              isLoading={isLoading}
               recentCommits={recentCommits}
               commitDiffs={commitDiffs}
               wrapText={wrapText}
               onFetchCommitDiff={fetchCommitDiff}
-            />
-          )}
-
-          {activeView === 'worktrees' && (
-            <WorktreesView
-              key={selectedProject.fullPath}
-              isMobile={isMobile}
-              selectedProject={selectedProject}
-              localBranches={localBranches}
-              onProjectSelect={onProjectSelect}
-              onProjectsRefresh={onProjectsRefresh}
             />
           )}
 

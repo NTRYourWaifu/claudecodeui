@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
 import '@xterm/xterm/css/xterm.css';
 import type { Project, ProjectSession } from '../../../types/app';
 import {
@@ -14,7 +13,6 @@ import {
 import { useShellRuntime } from '../hooks/useShellRuntime';
 import { sendSocketMessage } from '../utils/socket';
 import { getSessionDisplayName } from '../utils/auth';
-
 import ShellConnectionOverlay from './subcomponents/ShellConnectionOverlay';
 import ShellEmptyState from './subcomponents/ShellEmptyState';
 import ShellHeader from './subcomponents/ShellHeader';
@@ -48,8 +46,6 @@ export default function Shell({
   const [isRestarting, setIsRestarting] = useState(false);
   const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
   const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restartAfterInitRef = useRef(false);
   const onOutputRef = useRef<(() => void) | null>(null);
 
   const {
@@ -59,8 +55,12 @@ export default function Shell({
     isConnected,
     isInitialized,
     isConnecting,
+    authUrl,
+    authUrlVersion,
     connectToShell,
     disconnectFromShell,
+    openAuthUrlInBrowser,
+    copyAuthUrlToClipboard,
   } = useShellRuntime({
     selectedProject,
     selectedSession,
@@ -140,7 +140,6 @@ export default function Shell({
   useEffect(() => {
     return () => {
       if (promptCheckTimer.current) clearTimeout(promptCheckTimer.current);
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     };
   }, []);
 
@@ -191,41 +190,11 @@ export default function Shell({
   );
 
   const handleRestartShell = useCallback(() => {
-    restartAfterInitRef.current = true;
     setIsRestarting(true);
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-    }
-    restartTimerRef.current = setTimeout(() => {
+    window.setTimeout(() => {
       setIsRestarting(false);
-      restartTimerRef.current = null;
     }, SHELL_RESTART_DELAY_MS);
   }, []);
-
-  const handleDisconnectShell = useCallback(() => {
-    restartAfterInitRef.current = false;
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-    setIsRestarting(false);
-    disconnectFromShell({ suppressAutoConnect: true });
-  }, [disconnectFromShell]);
-
-  useEffect(() => {
-    if (
-      !restartAfterInitRef.current ||
-      isRestarting ||
-      !isInitialized ||
-      isConnected ||
-      isConnecting
-    ) {
-      return;
-    }
-
-    restartAfterInitRef.current = false;
-    connectToShell({ forceRestart: true });
-  }, [connectToShell, isConnected, isConnecting, isInitialized, isRestarting]);
 
   if (!selectedProject) {
     return (
@@ -239,7 +208,15 @@ export default function Shell({
   if (minimal) {
     return (
       <>
-        <ShellMinimalView terminalContainerRef={terminalContainerRef} />
+        <ShellMinimalView
+          terminalContainerRef={terminalContainerRef}
+          authUrl={authUrl}
+          authUrlVersion={authUrlVersion}
+          initialCommand={initialCommand}
+          isConnected={isConnected}
+          openAuthUrlInBrowser={openAuthUrlInBrowser}
+          copyAuthUrlToClipboard={copyAuthUrlToClipboard}
+        />
         <TerminalShortcutsPanel
           wsRef={wsRef}
           terminalRef={terminalRef}
@@ -277,7 +254,7 @@ export default function Shell({
         isRestarting={isRestarting}
         hasSession={Boolean(selectedSession)}
         sessionDisplayNameShort={sessionDisplayNameShort}
-        onDisconnect={handleDisconnectShell}
+        onDisconnect={disconnectFromShell}
         onRestart={handleRestartShell}
         statusNewSessionText={t('shell.status.newSession')}
         statusInitializingText={t('shell.status.initializing')}
@@ -286,7 +263,7 @@ export default function Shell({
         disconnectTitle={t('shell.actions.disconnectTitle')}
         restartLabel={t('shell.actions.restart')}
         restartTitle={t('shell.actions.restartTitle')}
-        disableRestart={isRestarting || !isInitialized}
+        disableRestart={isRestarting || isConnected}
       />
 
       <div className="relative flex-1 overflow-hidden p-2">
@@ -304,13 +281,13 @@ export default function Shell({
             connectLabel={t('shell.actions.connect')}
             connectTitle={t('shell.actions.connectTitle')}
             connectingLabel={t('shell.connecting')}
-            onConnect={handleRestartShell}
+            onConnect={connectToShell}
           />
         )}
 
         {cliPromptOptions && isConnected && (
           <div
-            className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-sm md:hidden"
+            className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-sm"
             onMouseDown={(e) => e.preventDefault()}
           >
             <div className="flex flex-wrap items-center gap-2">

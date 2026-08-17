@@ -1,7 +1,5 @@
 import { ExternalLink, Star, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-
-import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../../../constants/branding';
 import { IS_PLATFORM } from '../../../../../../constants/config';
 import type { ReleaseInfo } from '../../../../../../types/sharedTypes';
 
@@ -53,12 +51,7 @@ export default function VersionInfoSection({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span
-                className="text-sm font-semibold text-foreground"
-                style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
-              >
-                CloudCLI
-              </span>
+              <span className="text-sm font-semibold text-foreground">CloudCLI</span>
               <a
                 href={releasesUrl}
                 target="_blank"

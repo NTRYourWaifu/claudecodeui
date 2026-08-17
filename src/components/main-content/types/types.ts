@@ -1,13 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { AppTab, Project, ProjectSession } from '../../../types/app';
-import type {
-  MarkSessionIdle,
-  MarkSessionProcessing,
-  SessionActivityMap,
-} from '../../../hooks/useSessionProtection';
-import type { SessionEstablishedContext, SessionNavigationOptions } from '../../chat/types/types';
-import type { SettingsMainTab } from '../../settings/types/types';
+import type { SessionNavigationOptions } from '../../chat/types/types';
+
+export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
 export type TaskMasterTask = {
   id: string | number;
@@ -45,22 +41,20 @@ export type MainContentProps = {
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  latestMessage: unknown;
   isMobile: boolean;
   onMenuClick: () => void;
   isLoading: boolean;
   onInputFocusChange: (focused: boolean) => void;
-  onSessionProcessing: MarkSessionProcessing;
-  onSessionIdle: MarkSessionIdle;
-  processingSessions: SessionActivityMap;
+  onSessionActive: SessionLifecycleHandler;
+  onSessionInactive: SessionLifecycleHandler;
+  onSessionProcessing: SessionLifecycleHandler;
+  onSessionNotProcessing: SessionLifecycleHandler;
+  processingSessions: Set<string>;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
-  onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings: (tab?: SettingsMainTab) => void;
+  onShowSettings: () => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
-  /** Switches the app to another project — used by the git panel's Worktrees view. */
-  onProjectSelect: (project: Project) => void;
-  /** Silently re-syncs the sidebar project list after worktree projects change. */
-  onProjectsRefresh: () => void;
 };
 
 export type MainContentHeaderProps = {
@@ -69,7 +63,6 @@ export type MainContentHeaderProps = {
   selectedProject: Project;
   selectedSession: ProjectSession | null;
   shouldShowTasksTab: boolean;
-  shouldShowBrowserTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
 };

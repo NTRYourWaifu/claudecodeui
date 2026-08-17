@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-
 import { authenticatedFetch } from '../utils/api';
 
 type WebPushState = {
@@ -23,12 +22,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 export function useWebPush(): WebPushState {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => {
-    if (
-      typeof window === 'undefined'
-      || Boolean((window as any).cloudcliDesktopNotifications)
-      || !('Notification' in window)
-      || !('serviceWorker' in navigator)
-    ) {
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
       return 'unsupported';
     }
     return Notification.permission;

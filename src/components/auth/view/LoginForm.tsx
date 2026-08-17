@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Lock, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AuthErrorAlert from './AuthErrorAlert';
 import AuthInputField from './AuthInputField';
@@ -24,7 +23,7 @@ const initialState: LoginFormState = {
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { error: sessionError, login } = useAuth();
+  const { login } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -70,7 +69,6 @@ export default function LoginForm() {
           placeholder={t('login.placeholders.username')}
           isDisabled={isSubmitting}
           autoComplete="username"
-          icon={User}
         />
 
         <AuthInputField
@@ -82,24 +80,16 @@ export default function LoginForm() {
           isDisabled={isSubmitting}
           type="password"
           autoComplete="current-password"
-          icon={Lock}
         />
 
-        <AuthErrorAlert errorMessage={errorMessage || sessionError || ''} />
+        <AuthErrorAlert errorMessage={errorMessage} />
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:brightness-110 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-card active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
         >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {t('login.loading')}
-            </>
-          ) : (
-            t('login.submit')
-          )}
+          {isSubmitting ? t('login.loading') : t('login.submit')}
         </button>
       </form>
     </AuthScreenLayout>

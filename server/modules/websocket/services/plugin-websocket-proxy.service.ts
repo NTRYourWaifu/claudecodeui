@@ -26,15 +26,15 @@ export function handlePluginWsProxy(
     console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
   });
 
-  upstream.on('message', (data, isBinary) => {
+  upstream.on('message', (data) => {
     if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(data, { binary: isBinary });
+      clientWs.send(data);
     }
   });
 
-  clientWs.on('message', (data, isBinary) => {
+  clientWs.on('message', (data) => {
     if (upstream.readyState === WebSocket.OPEN) {
-      upstream.send(data, { binary: isBinary });
+      upstream.send(data);
     }
   });
 

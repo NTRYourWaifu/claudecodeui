@@ -92,14 +92,12 @@ DialogTrigger.displayName = 'DialogTrigger';
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   onEscapeKeyDown?: () => void;
   onPointerDownOutside?: () => void;
-  wrapperClassName?: string;
-  animationClassName?: string;
 }
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, onEscapeKeyDown, onPointerDownOutside, wrapperClassName, animationClassName, ...props }, ref) => {
+  ({ className, children, onEscapeKeyDown, onPointerDownOutside, ...props }, ref) => {
     const { open, onOpenChange, triggerRef } = useDialog();
     const contentRef = React.useRef<HTMLDivElement | null>(null);
     const previousFocusRef = React.useRef<HTMLElement | null>(null);
@@ -173,7 +171,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
     if (!open) return null;
 
     return createPortal(
-      <div className={cn('fixed inset-0 z-50', wrapperClassName)}>
+      <div className="fixed inset-0 z-50">
         {/* Overlay */}
         <div
           className="fixed inset-0 animate-dialog-overlay-show bg-black/50 backdrop-blur-sm"
@@ -195,7 +193,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2',
             'rounded-xl border bg-popover text-popover-foreground shadow-lg',
-            animationClassName ?? 'animate-dialog-content-show',
+            'animate-dialog-content-show',
             className
           )}
           {...props}

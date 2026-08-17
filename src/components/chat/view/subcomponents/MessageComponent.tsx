@@ -1,6 +1,5 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type {
   ChatMessage,
@@ -9,15 +8,12 @@ import type {
   Provider,
 } from '../../types/types';
 import { formatUsageLimitText } from '../../utils/chatFormatting';
+import { getClaudePermissionSuggestion } from '../../utils/chatPermissions';
 import type { Project } from '../../../../types/app';
-import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '../../tools';
+import { ToolRenderer, shouldHideToolResult } from '../../tools';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from '../../../../shared/view/ui';
-
-import ChatMessageImages from './ChatMessageImages';
-import ChatMessageFiles from './ChatMessageFiles';
 import { Markdown } from './Markdown';
 import MessageCopyControl from './MessageCopyControl';
-import MessageSpeakControl from './MessageSpeakControl';
 
 type DiffLine = {
   type: string;
@@ -32,6 +28,7 @@ type MessageComponentProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
+  autoExpandTools?: boolean;
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject?: Project | null;
@@ -44,9 +41,10 @@ type InteractiveOption = {
   isSelected: boolean;
 };
 
+type PermissionGrantState = 'idle' | 'granted' | 'error';
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -54,6 +52,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       (prevMessage.type === 'tool') ||
       (prevMessage.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
+  const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
     () => formatUsageLimitText(String(message.content || '')),
@@ -72,6 +73,36 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     !message.isThinking;
 
 
+  useEffect(() => {
+    setPermissionGrantState('idle');
+  }, [permissionSuggestion?.entry, message.toolId]);
+
+  useEffect(() => {
+    const node = messageRef.current;
+    if (!autoExpandTools || !node || !message.isToolUse) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !isExpanded) {
+            setIsExpanded(true);
+            const details = node.querySelectorAll<HTMLDetailsElement>('details');
+            details.forEach((detail) => {
+              detail.open = true;
+            });
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(node);
+
+    return () => {
+      observer.unobserve(node);
+    };
+  }, [autoExpandTools, isExpanded, message.isToolUse]);
+
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
@@ -86,41 +117,31 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
-        /* User turn on the right: claude.ai-style attachment cards above the bubble */
+        /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="flex min-w-0 flex-1 flex-col items-end gap-2 sm:flex-initial">
+          <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+            <div className="whitespace-pre-wrap break-words text-sm">
+              {message.content}
+            </div>
             {message.images && message.images.length > 0 && (
-              <ChatMessageImages
-                images={message.images}
-                projectId={selectedProject?.projectId}
-              />
-            )}
-            {message.files && message.files.length > 0 && (
-              <ChatMessageFiles files={message.files} />
-            )}
-            {userCopyContent.trim().length > 0 || (!message.images?.length && !message.files?.length) ? (
-              <div className="group max-w-full rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:px-4">
-                <div dir="auto" className="break-words font-serif text-sm">
-                  <Markdown
-                    breaks
-                    className="prose prose-sm prose-invert max-w-none font-serif [&_a]:text-blue-100 [&_a]:underline"
-                  >
-                    {message.content}
-                  </Markdown>
-                </div>
-                <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
-                  {shouldShowUserCopyControl && (
-                    <MessageCopyControl content={userCopyContent} messageType="user" />
-                  )}
-                  <span>{formattedTime}</span>
-                </div>
-              </div>
-            ) : (
-              /* Attachment-only turn: no text bubble, but the timestamp still shows */
-              <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                <span>{formattedTime}</span>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {message.images.map((img, idx) => (
+                  <img
+                    key={img.name || idx}
+                    src={img.data}
+                    alt={img.name}
+                    className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
+                    onClick={() => window.open(img.data, '_blank')}
+                  />
+                ))}
               </div>
             )}
+            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+              {shouldShowUserCopyControl && (
+                <MessageCopyControl content={userCopyContent} messageType="user" />
+              )}
+              <span>{formattedTime}</span>
+            </div>
           </div>
           {!isGrouped && (
             <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
@@ -150,22 +171,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   🔧
                 </div>
               ) : (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
                   <SessionProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error'
-                  ? t('messageTypes.error')
-                  : message.type === 'tool'
-                    ? t('messageTypes.tool')
-                    : (provider === 'cursor'
-                        ? t('messageTypes.cursor')
-                        : provider === 'codex'
-                          ? t('messageTypes.codex')
-                          : provider === 'opencode'
-                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
               </div>
             </div>
           )}
@@ -176,7 +187,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <>
                 <div className="flex flex-col">
                   <div className="flex flex-col">
-                    <Markdown className="prose prose-sm max-w-none font-serif dark:prose-invert">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert">
                       {String(message.displayText || '')}
                     </Markdown>
                   </div>
@@ -192,6 +203,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     onFileOpen={onFileOpen}
                     createDiff={createDiff}
                     selectedProject={selectedProject}
+                    autoExpandTools={autoExpandTools}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
                     isSubagentContainer={message.isSubagentContainer}
@@ -199,15 +211,74 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   />
                 )}
 
-                {/* Tool Result Section — Bash renders its output inside the command row above. */}
-                {message.toolResult && message.toolName !== 'Bash' && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
+                {/* Tool Result Section */}
+                {message.toolResult && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
-                    // Error results — collapsed red row that expands to the content
-                    <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
-                      <ToolErrorDisplay
-                        label={t('messageTypes.error')}
-                        content={String(message.toolResult.content || '')}
-                      />
+                    // Error results - red error box with content
+                    <div
+                      id={`tool-result-${message.toolId}`}
+                      className="relative mt-2 scroll-mt-4 rounded border border-red-200/60 bg-red-50/50 p-3 dark:border-red-800/40 dark:bg-red-950/10"
+                    >
+                      <div className="relative mb-2 flex items-center gap-1.5">
+                        <svg className="h-4 w-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('messageTypes.error')}</span>
+                      </div>
+                      <div className="relative text-sm text-red-900 dark:text-red-100">
+                        <Markdown className="prose prose-sm prose-red max-w-none dark:prose-invert">
+                          {String(message.toolResult.content || '')}
+                        </Markdown>
+                        {permissionSuggestion && (
+                          <div className="mt-4 border-t border-red-200/60 pt-3 dark:border-red-800/60">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!onGrantToolPermission) return;
+                                  const result = onGrantToolPermission(permissionSuggestion);
+                                  if (result?.success) {
+                                    setPermissionGrantState('granted');
+                                  } else {
+                                    setPermissionGrantState('error');
+                                  }
+                                }}
+                                disabled={permissionSuggestion.isAllowed || permissionGrantState === 'granted'}
+                                className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                  ? 'cursor-default border-green-300/70 bg-green-100 text-green-800 dark:border-green-800/60 dark:bg-green-900/30 dark:text-green-200'
+                                  : 'border-red-300/70 bg-white/80 text-red-700 hover:bg-white dark:border-red-800/60 dark:bg-gray-900/40 dark:text-red-200 dark:hover:bg-gray-900/70'
+                                  }`}
+                              >
+                                {permissionSuggestion.isAllowed || permissionGrantState === 'granted'
+                                  ? t('permissions.added')
+                                  : t('permissions.grant', { tool: permissionSuggestion.toolName })}
+                              </button>
+                              {onShowSettings && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); onShowSettings(); }}
+                                  className="text-xs text-red-700 underline hover:text-red-800 dark:text-red-200 dark:hover:text-red-100"
+                                >
+                                  {t('permissions.openSettings')}
+                                </button>
+                              )}
+                            </div>
+                            <div className="mt-2 text-xs text-red-700/90 dark:text-red-200/80">
+                              {t('permissions.addTo', { entry: permissionSuggestion.entry })}
+                            </div>
+                            {permissionGrantState === 'error' && (
+                              <div className="mt-2 text-xs text-red-700 dark:text-red-200">
+                                {t('permissions.error')}
+                              </div>
+                            )}
+                            {(permissionSuggestion.isAllowed || permissionGrantState === 'granted') && (
+                              <div className="mt-2 text-xs text-green-700 dark:text-green-200">
+                                {t('permissions.retry')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     // Non-error results - route through ToolRenderer (single source of truth)
@@ -221,6 +292,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                         onFileOpen={onFileOpen}
                         createDiff={createDiff}
                         selectedProject={selectedProject}
+                        autoExpandTools={autoExpandTools}
                       />
                     </div>
                   )
@@ -312,7 +384,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <Reasoning defaultOpen={false}>
                 <ReasoningTrigger />
                 <ReasoningContent>
-                  <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                  <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                     {message.content}
                   </Markdown>
                   <div className="mt-3 flex items-center text-[11px]">
@@ -321,7 +393,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 </ReasoningContent>
               </Reasoning>
             ) : (
-              <div dir="auto" className="text-sm text-gray-700 dark:text-gray-300">
+              <div className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Reasoning accordion */}
                 {showThinking && message.reasoning && (
                   <Reasoning className="mb-3" defaultOpen={false}>
@@ -347,15 +419,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
                       return (
                         <div className="my-2">
-                          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="mb-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
                             <span className="font-medium">{t('json.response')}</span>
                           </div>
-                          <div className="overflow-hidden rounded-lg border border-border bg-muted">
+                          <div className="overflow-hidden rounded-lg border border-gray-600/30 bg-gray-800 dark:border-gray-700 dark:bg-gray-900">
                             <pre className="overflow-x-auto p-4">
-                              <code className="block whitespace-pre font-mono text-sm text-foreground">
+                              <code className="block whitespace-pre font-mono text-sm text-gray-100 dark:text-gray-200">
                                 {formatted}
                               </code>
                             </pre>
@@ -369,7 +441,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                    <Markdown className="prose prose-sm prose-gray max-w-none dark:prose-invert">
                       {content}
                     </Markdown>
                   ) : (
@@ -385,9 +457,6 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
-                )}
-                {shouldShowAssistantCopyControl && (
-                  <MessageSpeakControl content={assistantCopyContent} />
                 )}
                 {!isGrouped && <span>{formattedTime}</span>}
               </div>

@@ -30,6 +30,9 @@ type ProjectApiView = {
   isArchived: boolean;
   isStarred: boolean;
   sessions: [];
+  cursorSessions: [];
+  codexSessions: [];
+  geminiSessions: [];
   sessionMeta: {
     hasMore: false;
     total: 0;
@@ -78,6 +81,9 @@ function mapProjectRowToApiView(projectRow: ProjectRepositoryRow): ProjectApiVie
     isArchived: Boolean(projectRow.isArchived),
     isStarred: Boolean(projectRow.isStarred),
     sessions: [],
+    cursorSessions: [],
+    codexSessions: [],
+    geminiSessions: [],
     sessionMeta: {
       hasMore: false,
       total: 0,

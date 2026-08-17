@@ -1,21 +1,21 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
- <h1>Cloud CLI（別名 Claude Code UI）</h1>
- <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a> のためのデスクトップ／モバイル UI。<br>ローカルでもリモートでも使え、アクティブなプロジェクトとセッションをどこからでも閲覧できます。</p>
+  <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+  <h1>Cloud CLI（別名 Claude Code UI）</h1>
+  <p><a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>、<a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>、<a href="https://developers.openai.com/codex">Codex</a>、<a href="https://geminicli.com/">Gemini-CLI</a> のためのデスクトップ／モバイル UI。<br>ローカルでもリモートでも使え、アクティブなプロジェクトとセッションをどこからでも閲覧できます。</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">ドキュメント</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">バグ報告</a> · <a href="CONTRIBUTING.md">コントリビュート</a>
+  <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">ドキュメント</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">バグ報告</a> · <a href="CONTRIBUTING.md">コントリビュート</a>
 </p>
 
 <p align="center">
- <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
- <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord コミュニティに参加"></a>
- <br><br>
- <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+  <a href="https://cloudcli.ai"><img src="https://img.shields.io/badge/☁️_CloudCLI_Cloud-Try_Now-0066FF?style=for-the-badge" alt="CloudCLI Cloud"></a>
+  <a href="https://discord.gg/buxwujPNRE"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord コミュニティに参加"></a>
+  <br><br>
+  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <b>日本語</b> · <a href="./README.tr.md">Türkçe</a></i></div>
+<div align="right"><i><a href="./README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">中文</a> · <b>日本語</b> · <a href="./README.tr.md">Türkçe</a></i></div>
 
 ---
 
@@ -43,7 +43,7 @@
 <h3>CLI 選択</h3>
 <img src="public/screenshots/cli-selection.png" alt="CLI 選択" width="400">
 <br>
-<em>Claude Code、Cursor CLI、Codex から選択</em>
+<em>Claude Code、Gemini、Cursor CLI、Codex から選択</em>
 </td>
 </tr>
 </table>
@@ -99,7 +99,7 @@ cloudcli
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Claude Code、Codex に対応。詳細は[サンドボックスのドキュメント](docker/)をご覧ください。
+Claude Code、Codex、Gemini CLI に対応。詳細は[サンドボックスのドキュメント](docker/)をご覧ください。
 
 ---
 
@@ -115,14 +115,14 @@ CloudCLI UI は、CloudCLI Cloud を支えるオープンソースの UI レイ�
 | **マシンの稼働継続** | はい | いいえ |
 | **モバイルアクセス** | 同一ネットワーク内の任意のブラウザ | 任意のデバイス（ネイティブアプリも準備中） |
 | **利用可能なセッション** | `~/.claude` から全セッションを自動検出 | クラウド環境内の全セッション |
-| **対応エージェント** | Claude Code、Cursor CLI、Codex | Claude Code、Cursor CLI、Codex |
+| **対応エージェント** | Claude Code、Cursor CLI、Codex、Gemini CLI | Claude Code、Cursor CLI、Codex、Gemini CLI |
 | **ファイルエクスプローラとGit** | はい（UI に内蔵） | はい（UI に内蔵） |
 | **MCP設定** | UI で管理し、ローカルの `~/.claude` 設定と同期 | UI で管理 |
 | **IDEアクセス** | ローカル IDE | クラウド環境に接続された任意の IDE |
 | **REST API** | はい | はい |
 | **n8n ノード** | いいえ | はい |
 | **チーム共有** | いいえ | はい |
-| **料金プラン** | 無料（オープンソース） | 月 €7〜 |
+| **料金プラン** | 無料（オープンソース） | 月 $7〜 |
 
 > どちらの選択肢でも、AI のサブスクリプション（Claude、Cursor など）はご自身のものを使用します — CloudCLI が提供するのは環境であり、AI そのものではありません。
 
@@ -158,14 +158,6 @@ CloudCLI にはプラグインシステムがあり、独自のフロントエ�
 | プラグイン | 説明 |
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 現在のプロジェクトについて、ファイル数、コード行数、ファイル種別の内訳、最大ファイル、最近変更されたファイルを表示 |
-| **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 複数タブに対応した本格的な xterm.js ターミナル |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 長時間実行中の Claude Code セッションのハングを監視し、プロセス操作を提供 |
-| **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | ワークスペース単位のスケジュール済みプロンプトを作成し、Codex、Claude Code などのローカル CLI で実行 |
-| **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI 内で Claude Code のセッション分析を行い、トークン消費の可視化も提供 |
-| **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | アクティブな Claude Code セッションを表示、管理、終了 |
-| **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | モデル価格とトークン使用量から API コストを計算し、モデル価格プリセットにも対応 |
-| **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | エージェントタスクを表示、フィルタリング、起動するためのタスクキューダッシュボード |
-| **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues 用の Kanban ボード。TaskMaster との双方向同期と /github-task CLI スキルの自動インストールに対応 |
 
 ### 自作する
 
@@ -185,7 +177,7 @@ CloudCLI UI と CloudCLI Cloud は、Claude Code の横に別物として存在�
 
 - **すべてのセッションにアクセス** — CloudCLI UI は `~/.claude` フォルダのすべてのセッションを自動検出します。Remote Control は、Claude モバイルアプリで利用可能にするため、1つのアクティブセッションだけを公開します。
 - **設定はあなたの設定** — CloudCLI UI で変更した MCP サーバー、ツール権限、プロジェクト構成は、Claude Code の設定に直接書き込まれて即座に反映され、その逆（Claude Code での変更が UI に反映）も同様です。
-- **対応エージェントがさらに充実** — Claude Code に加えて Cursor CLI、Codex にも対応しています。
+- **対応エージェントがさらに充実** — Claude Code に加えて Cursor CLI、Codex、Gemini CLI にも対応しています。
 - **チャット窓だけではない完全な UI** — ファイルエクスプローラー、Git 統合、MCP 管理、シェル端末などがすべて組み込まれています。
 - **CloudCLI Cloud はクラウド上で稼働** — ノートパソコンを閉じてもエージェントは動き続けます。監視が要る端末も、スリープ防止も不要です。
 
@@ -194,7 +186,7 @@ CloudCLI UI と CloudCLI Cloud は、Claude Code の横に別物として存在�
 <details>
 <summary>AI のサブスクリプションは別途支払いが必要ですか？</summary>
 
-はい。CloudCLI は環境を提供するものであり、AI は含まれません。Claude、Cursor、Codex のいずれかのサブスクリプションはご自身でご用意ください。CloudCLI Cloud のホスティング環境はそれに加えて月額 €7 から提供されます。
+はい。CloudCLI は環境を提供するものであり、AI は含まれません。Claude、Cursor、Codex、または Gemini のサブスクリプションはご自身でご用意ください。CloudCLI Cloud のホスティング環境はそれに加えて月額 $7 から提供されます。
 
 </details>
 
@@ -234,6 +226,7 @@ GNU General Public License v3.0 - 詳細は [LICENSE](LICENSE) ファイルを�
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic の公式 CLI
 - **[Cursor CLI](https://docs.cursor.com/en/cli/overview)** - Cursor の公式 CLI
 - **[Codex](https://developers.openai.com/codex)** - OpenAI Codex
+- **[Gemini-CLI](https://geminicli.com/)** - Google Gemini CLI
 - **[React](https://react.dev/)** - ユーザーインターフェースライブラリ
 - **[Vite](https://vitejs.dev/)** - 高速ビルドツールと開発サーバー
 - **[Tailwind CSS](https://tailwindcss.com/)** - ユーティリティファーストの CSS フレームワーク
@@ -245,5 +238,5 @@ GNU General Public License v3.0 - 詳細は [LICENSE](LICENSE) ファイルを�
 ---
 
 <div align="center">
- <strong>Claude Code、Cursor、Codex コミュニティのために心を込めて作りました。</strong>
+  <strong>Claude Code、Cursor、Codex コミュニティのために心を込めて作りました。</strong>
 </div>

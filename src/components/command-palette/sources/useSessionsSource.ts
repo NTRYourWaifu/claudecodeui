@@ -11,6 +11,9 @@ export type SessionResult = {
 
 interface SessionsResponse {
   sessions?: ProjectSession[];
+  cursorSessions?: ProjectSession[];
+  codexSessions?: ProjectSession[];
+  geminiSessions?: ProjectSession[];
 }
 
 export function useSessionsSource(projectId: string | undefined, enabled: boolean) {
@@ -25,10 +28,16 @@ export function useSessionsSource(projectId: string | undefined, enabled: boolea
       );
     },
     parse: (data) => {
-      return (data.sessions ?? []).map<SessionResult>((s) => ({
+      const all: ProjectSession[] = [
+        ...(data.sessions ?? []),
+        ...(data.cursorSessions ?? []),
+        ...(data.codexSessions ?? []),
+        ...(data.geminiSessions ?? []),
+      ];
+      return all.map<SessionResult>((s) => ({
         id: s.id,
         label: (s.title || s.summary || s.name || s.id) as string,
-        provider: (s.__provider || s.provider) as LLMProvider | undefined,
+        provider: s.__provider,
       }));
     },
   });

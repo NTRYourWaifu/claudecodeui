@@ -1,61 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
-import { ClipboardAddon, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
-
 import type { Project } from '../../../types/app';
-import { copyTextToClipboard } from '../../../utils/clipboard';
 import {
+  CODEX_DEVICE_AUTH_URL,
   TERMINAL_INIT_DELAY_MS,
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
 } from '../constants/constants';
-import {
-  installMobileTerminalSelection,
-  type MobileTerminalSelectionManager,
-} from '../utils/mobileTerminalSelection';
+import { copyTextToClipboard } from '../../../utils/clipboard';
+import { isCodexLoginCommand } from '../utils/auth';
 import { sendSocketMessage } from '../utils/socket';
 import { ensureXtermFocusStyles } from '../utils/terminalStyles';
-
-// CLIs running inside the pty (e.g. `claude auth login`'s "press c to copy"
-// device-flow prompt) write to the clipboard via an OSC 52 escape sequence,
-// not a browser event — xterm.js ignores OSC 52 unless a clipboard addon is
-// loaded. Routes writes through the same fallback-aware helper the terminal's
-// own selection-copy shortcut uses, since `navigator.clipboard` is often
-// unavailable on self-hosted, non-HTTPS deployments.
-// `ClipboardSelectionType.SYSTEM` is `'c'` (vs. `'p'` for the X11 primary
-// selection) — compared as a literal since the addon ships it as a const
-// enum, which isolatedModules builds (esbuild/Vite) can't import as a value.
-const oscClipboardProvider: IClipboardProvider = {
-  readText: async (selection) => {
-    if (selection !== 'c') {
-      return '';
-    }
-    try {
-      return (await navigator.clipboard?.readText?.()) || '';
-    } catch {
-      return '';
-    }
-  },
-  writeText: async (selection, text) => {
-    if (selection !== 'c') {
-      return;
-    }
-    await copyTextToClipboard(text);
-  },
-};
-
-// The addon's published typings declare a single `(provider?)` constructor
-// param, but the shipped runtime actually takes `(base64?, provider?)` — see
-// node_modules/@xterm/addon-clipboard/lib/addon-clipboard.js. Cast to call it
-// the way it's really implemented.
-const ClipboardAddonCtor = ClipboardAddon as unknown as new (
-  base64?: unknown,
-  provider?: IClipboardProvider,
-) => ClipboardAddon;
 
 type UseShellTerminalOptions = {
   terminalContainerRef: RefObject<HTMLDivElement>;
@@ -65,6 +24,10 @@ type UseShellTerminalOptions = {
   selectedProject: Project | null | undefined;
   minimal: boolean;
   isRestarting: boolean;
+  initialCommandRef: MutableRefObject<string | null | undefined>;
+  isPlainShellRef: MutableRefObject<boolean>;
+  authUrlRef: MutableRefObject<string>;
+  copyAuthUrlToClipboard: (url?: string) => Promise<boolean>;
   closeSocket: () => void;
 };
 
@@ -82,11 +45,14 @@ export function useShellTerminal({
   selectedProject,
   minimal,
   isRestarting,
+  initialCommandRef,
+  isPlainShellRef,
+  authUrlRef,
+  copyAuthUrlToClipboard,
   closeSocket,
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
   const resizeTimeoutRef = useRef<number | null>(null);
-  const mobileSelectionRef = useRef<MobileTerminalSelectionManager | null>(null);
   const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || '';
   const hasSelectedProject = Boolean(selectedProject);
 
@@ -104,11 +70,6 @@ export function useShellTerminal({
   }, [terminalRef]);
 
   const disposeTerminal = useCallback(() => {
-    if (mobileSelectionRef.current) {
-      mobileSelectionRef.current.dispose();
-      mobileSelectionRef.current = null;
-    }
-
     if (terminalRef.current) {
       terminalRef.current.dispose();
       terminalRef.current = null;
@@ -119,8 +80,7 @@ export function useShellTerminal({
   }, [fitAddonRef, terminalRef]);
 
   useEffect(() => {
-    const terminalContainer = terminalContainerRef.current;
-    if (!terminalContainer || !hasSelectedProject || isRestarting || terminalRef.current) {
+    if (!terminalContainerRef.current || !hasSelectedProject || isRestarting || terminalRef.current) {
       return;
     }
 
@@ -130,8 +90,6 @@ export function useShellTerminal({
     const nextFitAddon = new FitAddon();
     fitAddonRef.current = nextFitAddon;
     nextTerminal.loadAddon(nextFitAddon);
-
-    nextTerminal.loadAddon(new ClipboardAddonCtor(undefined, oscClipboardProvider));
 
     // Avoid wrapped partial links in compact login flows.
     if (!minimal) {
@@ -144,28 +102,7 @@ export function useShellTerminal({
       console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
     }
 
-    nextTerminal.open(terminalContainer);
-    mobileSelectionRef.current = installMobileTerminalSelection(
-      nextTerminal,
-      terminalContainer,
-      {
-        onFontSizeChange: (fontSize) => {
-          nextTerminal.options.fontSize = fontSize;
-
-          const currentFitAddon = fitAddonRef.current;
-          if (currentFitAddon) {
-            currentFitAddon.fit();
-            sendSocketMessage(wsRef.current, {
-              type: 'resize',
-              cols: nextTerminal.cols,
-              rows: nextTerminal.rows,
-            });
-          } else {
-            nextTerminal.refresh(0, nextTerminal.rows - 1);
-          }
-        },
-      },
-    );
+    nextTerminal.open(terminalContainerRef.current);
 
     const copyTerminalSelection = async () => {
       const selection = nextTerminal.getSelection();
@@ -196,9 +133,29 @@ export function useShellTerminal({
       void copyTextToClipboard(selection);
     };
 
-    terminalContainer.addEventListener('copy', handleTerminalCopy);
+    terminalContainerRef.current.addEventListener('copy', handleTerminalCopy);
 
     nextTerminal.attachCustomKeyEventHandler((event) => {
+      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
+        ? CODEX_DEVICE_AUTH_URL
+        : authUrlRef.current;
+
+      if (
+        event.type === 'keydown' &&
+        minimal &&
+        isPlainShellRef.current &&
+        activeAuthUrl &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.key?.toLowerCase() === 'c'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void copyAuthUrlToClipboard(activeAuthUrl);
+        return false;
+      }
+
       if (
         event.type === 'keydown' &&
         (event.ctrlKey || event.metaKey) &&
@@ -283,10 +240,10 @@ export function useShellTerminal({
       }, TERMINAL_RESIZE_DELAY_MS);
     });
 
-    resizeObserver.observe(terminalContainer);
+    resizeObserver.observe(terminalContainerRef.current);
 
     return () => {
-      terminalContainer.removeEventListener('copy', handleTerminalCopy);
+      terminalContainerRef.current?.removeEventListener('copy', handleTerminalCopy);
       resizeObserver.disconnect();
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current);
@@ -297,12 +254,16 @@ export function useShellTerminal({
       disposeTerminal();
     };
   }, [
+    authUrlRef,
     closeSocket,
+    copyAuthUrlToClipboard,
     disposeTerminal,
     fitAddonRef,
+    initialCommandRef,
+    isPlainShellRef,
     isRestarting,
-    hasSelectedProject,
     minimal,
+    hasSelectedProject,
     selectedProjectKey,
     terminalContainerRef,
     terminalRef,

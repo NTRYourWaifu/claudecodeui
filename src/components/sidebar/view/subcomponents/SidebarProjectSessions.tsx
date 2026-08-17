@@ -1,12 +1,15 @@
+import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
-import type { SessionActivityMap } from '../../../../hooks/useSessionProtection';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
 
 import SidebarSessionItem from './SidebarSessionItem';
+
+const INITIAL_VISIBLE_SESSIONS = 5;
+const VISIBLE_SESSIONS_STEP = 5;
 
 type SidebarProjectSessionsProps = {
   project: Project;
@@ -16,8 +19,6 @@ type SidebarProjectSessionsProps = {
   initialSessionsLoaded: boolean;
   hasMoreSessions: boolean;
   isLoadingMoreSessions: boolean;
-  activeSessions: SessionActivityMap;
-  attentionSessionIds: ReadonlySet<string>;
   currentTime: Date;
   editingSession: string | null;
   editingSessionName: string;
@@ -64,8 +65,6 @@ export default function SidebarProjectSessions({
   initialSessionsLoaded,
   hasMoreSessions,
   isLoadingMoreSessions,
-  activeSessions,
-  attentionSessionIds,
   currentTime,
   editingSession,
   editingSessionName,
@@ -80,11 +79,66 @@ export default function SidebarProjectSessions({
   onNewSession,
   t,
 }: SidebarProjectSessionsProps) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_SESSIONS);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset the visible window whenever the panel collapses or the project context
+  // changes, so re-opening a project always starts from the most recent N entries.
+  useEffect(() => {
+    if (!isExpanded) {
+      setVisibleCount(INITIAL_VISIBLE_SESSIONS);
+    }
+  }, [isExpanded, project.projectId]);
+
+  // Clamp visibleCount back down if sessions shrink (e.g. after deletion) so we
+  // never render a stale "show more" gap.
+  useEffect(() => {
+    setVisibleCount((current) => {
+      const target = Math.max(INITIAL_VISIBLE_SESSIONS, Math.min(current, sessions.length || INITIAL_VISIBLE_SESSIONS));
+      return target;
+    });
+  }, [sessions.length]);
+
+  const hasMoreLocal = visibleCount < sessions.length;
+  const reachedLocalEnd = !hasMoreLocal;
+  const canFetchMore = reachedLocalEnd && hasMoreSessions && !isLoadingMoreSessions;
+
+  // Infinite scroll: when the sentinel below the list comes into view, either
+  // grow the local window or, if exhausted, ask the controller to fetch more
+  // from the backend. The observer only attaches while the panel is expanded.
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+    const node = sentinelRef.current;
+    if (!node) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) {
+          return;
+        }
+        if (hasMoreLocal) {
+          setVisibleCount((current) => Math.min(current + VISIBLE_SESSIONS_STEP, sessions.length));
+        } else if (canFetchMore) {
+          onLoadMoreSessions(project.projectId);
+        }
+      },
+      { rootMargin: '120px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isExpanded, hasMoreLocal, canFetchMore, sessions.length, project.projectId, onLoadMoreSessions]);
+
   if (!isExpanded) {
     return null;
   }
 
   const hasSessions = sessions.length > 0;
+  const visibleSessions = sessions.slice(0, visibleCount);
+  const showSentinel = hasSessions && (hasMoreLocal || hasMoreSessions);
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pl-3">
@@ -119,14 +173,12 @@ export default function SidebarProjectSessions({
         </div>
       ) : (
         <>
-          {sessions.map((session) => (
+          {visibleSessions.map((session) => (
             <SidebarSessionItem
               key={session.id}
               project={project}
               session={session}
               selectedSession={selectedSession}
-              isProcessing={activeSessions.has(session.id)}
-              needsAttention={attentionSessionIds.has(session.id)}
               currentTime={currentTime}
               editingSession={editingSession}
               editingSessionName={editingSessionName}
@@ -141,16 +193,20 @@ export default function SidebarProjectSessions({
             />
           ))}
 
-          {hasMoreSessions && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-full justify-center text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => onLoadMoreSessions(project.projectId)}
-              disabled={isLoadingMoreSessions}
-            >
-              {isLoadingMoreSessions ? t('sessions.loadingSessions') : 'Load more sessions'}
-            </Button>
+          {showSentinel && (
+            <div ref={sentinelRef} className="flex h-8 items-center justify-center">
+              {isLoadingMoreSessions ? (
+                <span className="text-xs text-muted-foreground">{t('sessions.loadingSessions')}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground/60">
+                  {hasMoreLocal
+                    ? `${visibleCount} / ${sessions.length}`
+                    : hasMoreSessions
+                      ? '...'
+                      : ''}
+                </span>
+              )}
+            </div>
           )}
         </>
       )}

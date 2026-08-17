@@ -7,54 +7,6 @@ import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
 
-function formatToolResultContent(content: unknown): string {
-  const text = typeof content === 'string' ? content : JSON.stringify(content);
-  const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
-  return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
-}
-
-type ParsedTaskNotification = {
-  status: string;
-  summary: string;
-  result: string;
-};
-
-/**
- * Parses a background-agent `<task-notification>` block.
- *
- * The harness injects these as user-role messages when a background task stops.
- * Newer notifications carry extra fields (`<tool-use-id>`, `<note>`, `<usage>`,
- * and a `<result>` markdown payload) that the previous single-shot regex could
- * not match, so the whole raw XML block leaked through as plain user text.
- * Fields are extracted independently so the block renders as an assistant
- * notification plus, when present, the agent's markdown result.
- */
-function parseTaskNotification(content: string): ParsedTaskNotification | null {
-  if (!content.trimStart().startsWith('<task-notification>')) {
-    return null;
-  }
-
-  const statusMatch = /<status>([\s\S]*?)<\/status>/.exec(content);
-  const summaryMatch = /<summary>([\s\S]*?)<\/summary>/.exec(content);
-
-  let result = '';
-  const resultOpen = content.indexOf('<result>');
-  if (resultOpen !== -1) {
-    const afterOpen = content.slice(resultOpen + '<result>'.length);
-    const closeIndex = afterOpen.indexOf('</result>');
-    result =
-      closeIndex === -1
-        ? afterOpen.replace(/<\/task-notification>\s*$/, '').trim()
-        : afterOpen.slice(0, closeIndex).trim();
-  }
-
-  return {
-    status: statusMatch?.[1]?.trim() || 'completed',
-    summary: summaryMatch?.[1]?.trim() || 'Background task finished',
-    result,
-  };
-}
-
 /**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
@@ -68,12 +20,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
   // First pass: collect tool results for attachment
   const toolResultMap = new Map<string, NormalizedMessage>();
-  const toolUseIds = new Set<string>();
   for (const msg of messages) {
-    if (msg.kind === 'tool_use' && msg.toolId) {
-      toolUseIds.add(msg.toolId);
-    }
-
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
     }
@@ -93,39 +40,26 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     switch (msg.kind) {
       case 'text': {
         const content = msg.content || '';
-        const images = Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined;
-        const files = Array.isArray(msg.files) && msg.files.length > 0 ? msg.files : undefined;
-        if (!content.trim() && !images && !files) continue;
+        if (!content.trim()) continue;
 
         if (msg.role === 'user') {
           // Parse task notifications
-          const taskNotif = parseTaskNotification(content);
-          if (taskNotif) {
+          const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
+          const taskNotifMatch = taskNotifRegex.exec(content);
+          if (taskNotifMatch) {
             converted.push({
               type: 'assistant',
-              content: taskNotif.summary,
+              content: taskNotifMatch[2]?.trim() || 'Background task finished',
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotif.status,
+              taskStatus: taskNotifMatch[1]?.trim() || 'completed',
               ...sharedMetadata,
             });
-            // Render the agent's result as a normal assistant message so its
-            // markdown displays correctly instead of leaking raw XML.
-            if (taskNotif.result) {
-              converted.push({
-                type: 'assistant',
-                content: formatUsageLimitText(unescapeWithMathProtection(decodeHtmlEntities(taskNotif.result))),
-                timestamp: msg.timestamp,
-                ...sharedMetadata,
-              });
-            }
           } else {
             converted.push({
               type: 'user',
               content: unescapeWithMathProtection(decodeHtmlEntities(content)),
               timestamp: msg.timestamp,
-              images,
-              files,
               ...sharedMetadata,
             });
           }
@@ -163,7 +97,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         const toolResult = tr
           ? {
-              content: formatToolResultContent(tr.content),
+              content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
               isError: Boolean(tr.isError),
               toolUseResult: (tr as any).toolUseResult,
             }
@@ -257,34 +191,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       // tool_result is handled via attachment to tool_use above
-      case 'tool_result': {
-        if (msg.toolId && toolUseIds.has(msg.toolId)) {
-          break;
-        }
-
-        // A result with a toolId but no matching tool_use in the loaded set is
-        // almost always a tool_use/tool_result pair split across a pagination
-        // boundary (older page not loaded yet). Rendering its raw content here
-        // produces an unstyled dump that "fixes itself" once the older page
-        // loads; skip it and let it attach to its tool_use when that arrives.
-        if (msg.toolId) {
-          break;
-        }
-
-        const content = formatToolResultContent(msg.content || '');
-        if (!content.trim()) {
-          break;
-        }
-
-        converted.push({
-          type: msg.isError ? 'error' : 'assistant',
-          content,
-          timestamp: msg.timestamp,
-          toolId: msg.toolId,
-          ...sharedMetadata,
-        });
+      case 'tool_result':
         break;
-      }
 
       default:
         break;

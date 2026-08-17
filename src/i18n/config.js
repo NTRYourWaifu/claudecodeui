@@ -24,23 +24,13 @@ import enCodeEditor from './locales/en/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import enTasks from './locales/en/tasks.json';
 
-import esCommon from './locales/es/common.json';
-import esSettings from './locales/es/settings.json';
-import esAuth from './locales/es/auth.json';
-import esSidebar from './locales/es/sidebar.json';
-import esChat from './locales/es/chat.json';
-import esCodeEditor from './locales/es/codeEditor.json';
-// eslint-disable-next-line import-x/order
-import esTasks from './locales/es/tasks.json';
-
 import koCommon from './locales/ko/common.json';
 import koSettings from './locales/ko/settings.json';
 import koAuth from './locales/ko/auth.json';
 import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
-import koCodeEditor from './locales/ko/codeEditor.json';
 // eslint-disable-next-line import-x/order
-import koTasks from './locales/ko/tasks.json';
+import koCodeEditor from './locales/ko/codeEditor.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -49,7 +39,14 @@ import zhSidebar from './locales/zh-CN/sidebar.json';
 import zhChat from './locales/zh-CN/chat.json';
 // eslint-disable-next-line import-x/order
 import zhCodeEditor from './locales/zh-CN/codeEditor.json';
-import zhTasks from './locales/zh-CN/tasks.json';
+
+import zhTwCommon from './locales/zh-TW/common.json';
+import zhTwSettings from './locales/zh-TW/settings.json';
+import zhTwAuth from './locales/zh-TW/auth.json';
+import zhTwSidebar from './locales/zh-TW/sidebar.json';
+import zhTwChat from './locales/zh-TW/chat.json';
+// eslint-disable-next-line import-x/order
+import zhTwCodeEditor from './locales/zh-TW/codeEditor.json';
 
 import jaCommon from './locales/ja/common.json';
 import jaSettings from './locales/ja/settings.json';
@@ -95,15 +92,6 @@ import itCodeEditor from './locales/it/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import itTasks from './locales/it/tasks.json';
 
-import zhTWCommon from './locales/zh-TW/common.json';
-import zhTWSettings from './locales/zh-TW/settings.json';
-import zhTWAuth from './locales/zh-TW/auth.json';
-import zhTWSidebar from './locales/zh-TW/sidebar.json';
-import zhTWChat from './locales/zh-TW/chat.json';
-import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
-// eslint-disable-next-line import-x/order
-import zhTWTasks from './locales/zh-TW/tasks.json';
-
 // Import supported languages configuration
 import { languages } from './languages.js';
 
@@ -137,15 +125,6 @@ i18n
         codeEditor: enCodeEditor,
         tasks: enTasks,
       },
-      es: {
-        common: esCommon,
-        settings: esSettings,
-        auth: esAuth,
-        sidebar: esSidebar,
-        chat: esChat,
-        codeEditor: esCodeEditor,
-        tasks: esTasks,
-      },
       ko: {
         common: koCommon,
         settings: koSettings,
@@ -153,7 +132,6 @@ i18n
         sidebar: koSidebar,
         chat: koChat,
         codeEditor: koCodeEditor,
-        tasks: koTasks,
       },
       'zh-CN': {
         common: zhCommon,
@@ -162,7 +140,14 @@ i18n
         sidebar: zhSidebar,
         chat: zhChat,
         codeEditor: zhCodeEditor,
-        tasks: zhTasks,
+      },
+      'zh-TW': {
+        common: zhTwCommon,
+        settings: zhTwSettings,
+        auth: zhTwAuth,
+        sidebar: zhTwSidebar,
+        chat: zhTwChat,
+        codeEditor: zhTwCodeEditor,
       },
       ja: {
         common: jaCommon,
@@ -208,15 +193,6 @@ i18n
         chat: itChat,
         codeEditor: itCodeEditor,
         tasks: itTasks,
-      },
-      'zh-TW': {
-        common: zhTWCommon,
-        settings: zhTWSettings,
-        auth: zhTWAuth,
-        sidebar: zhTWSidebar,
-        chat: zhTWChat,
-        codeEditor: zhTWCodeEditor,
-        tasks: zhTWTasks,
       },
     },
 

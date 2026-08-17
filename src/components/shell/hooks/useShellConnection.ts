@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
-
 import type { Project, ProjectSession } from '../../../types/app';
 import { TERMINAL_INIT_DELAY_MS } from '../constants/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '../utils/socket';
@@ -24,6 +23,7 @@ type UseShellConnectionOptions = {
   autoConnect: boolean;
   closeSocket: () => void;
   clearTerminalScreen: () => void;
+  setAuthUrl: (nextAuthUrl: string) => void;
   onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 
@@ -31,8 +31,8 @@ type UseShellConnectionResult = {
   isConnected: boolean;
   isConnecting: boolean;
   closeSocket: () => void;
-  connectToShell: (options?: { forceRestart?: boolean }) => void;
-  disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
+  connectToShell: () => void;
+  disconnectFromShell: () => void;
 };
 
 export function useShellConnection({
@@ -48,13 +48,12 @@ export function useShellConnection({
   autoConnect,
   closeSocket,
   clearTerminalScreen,
+  setAuthUrl,
   onOutputRef,
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const connectingRef = useRef(false);
-  const forceRestartOnInitRef = useRef(false);
-  const suppressAutoConnectRef = useRef(false);
 
   const handleProcessCompletion = useCallback(
     (output: string) => {
@@ -98,8 +97,14 @@ export function useShellConnection({
         return;
       }
 
+      if (message.type === 'auth_url' || message.type === 'url_open') {
+        const nextAuthUrl = typeof message.url === 'string' ? message.url : '';
+        if (nextAuthUrl) {
+          setAuthUrl(nextAuthUrl);
+        }
+      }
     },
-    [handleProcessCompletion, onOutputRef, terminalRef],
+    [handleProcessCompletion, onOutputRef, setAuthUrl, terminalRef],
   );
 
   const connectWebSocket = useCallback(
@@ -125,6 +130,7 @@ export function useShellConnection({
           setIsConnected(true);
           setIsConnecting(false);
           connectingRef.current = false;
+          setAuthUrl('');
 
           window.setTimeout(() => {
             const currentTerminal = terminalRef.current;
@@ -135,8 +141,6 @@ export function useShellConnection({
             }
 
             currentFitAddon.fit();
-            const forceRestart = forceRestartOnInitRef.current;
-            forceRestartOnInitRef.current = false;
 
             sendSocketMessage(socket, {
               type: 'init',
@@ -148,7 +152,6 @@ export function useShellConnection({
               rows: currentTerminal.rows,
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current,
-              forceRestart,
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
@@ -174,7 +177,6 @@ export function useShellConnection({
         setIsConnected(false);
         setIsConnecting(false);
         connectingRef.current = false;
-        forceRestartOnInitRef.current = false;
       }
     },
     [
@@ -187,44 +189,33 @@ export function useShellConnection({
       isPlainShellRef,
       selectedProjectRef,
       selectedSessionRef,
+      setAuthUrl,
       terminalRef,
       wsRef,
     ],
   );
 
-  const connectToShell = useCallback((options?: { forceRestart?: boolean }) => {
+  const connectToShell = useCallback(() => {
     if (!isInitialized || isConnected || isConnecting || connectingRef.current) {
       return;
     }
 
-    forceRestartOnInitRef.current = Boolean(options?.forceRestart);
-    suppressAutoConnectRef.current = false;
     connectingRef.current = true;
     setIsConnecting(true);
     connectWebSocket(true);
   }, [connectWebSocket, isConnected, isConnecting, isInitialized]);
 
-  const disconnectFromShell = useCallback((options?: { suppressAutoConnect?: boolean }) => {
-    if (options?.suppressAutoConnect) {
-      suppressAutoConnectRef.current = true;
-    }
-
+  const disconnectFromShell = useCallback(() => {
     closeSocket();
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
     connectingRef.current = false;
-    forceRestartOnInitRef.current = false;
-  }, [clearTerminalScreen, closeSocket]);
+    setAuthUrl('');
+  }, [clearTerminalScreen, closeSocket, setAuthUrl]);
 
   useEffect(() => {
-    if (
-      !autoConnect ||
-      suppressAutoConnectRef.current ||
-      !isInitialized ||
-      isConnecting ||
-      isConnected
-    ) {
+    if (!autoConnect || !isInitialized || isConnecting || isConnected) {
       return;
     }
 

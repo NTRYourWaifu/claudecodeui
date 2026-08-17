@@ -2,8 +2,6 @@ import type {
   IProvider,
   IProviderAuth,
   IProviderMcp,
-  IProviderModels,
-  IProviderRuntime,
   IProviderSessionSynchronizer,
   IProviderSkills,
   IProviderSessions,
@@ -13,13 +11,12 @@ import type { LLMProvider } from '@/shared/types.js';
 /**
  * Shared provider base.
  *
- * Concrete providers expose their live runtime plus model, auth, MCP, skill,
- * session, and synchronization facets behind one registry-owned object.
+ * Concrete providers must expose auth/MCP handlers and implement message
+ * normalization/history loading because those behaviors depend on native
+ * SDK/CLI formats.
  */
 export abstract class AbstractProvider implements IProvider {
   readonly id: LLMProvider;
-  abstract readonly runtime: IProviderRuntime;
-  abstract readonly models: IProviderModels;
   abstract readonly mcp: IProviderMcp;
   abstract readonly auth: IProviderAuth;
   abstract readonly skills: IProviderSkills;

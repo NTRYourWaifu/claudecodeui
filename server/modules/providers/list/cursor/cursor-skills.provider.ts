@@ -28,12 +28,4 @@ export class CursorSkillsProvider extends SkillsProvider {
       },
     ];
   }
-
-  protected async getGlobalSkillSource(): Promise<ProviderSkillSource> {
-    return {
-      scope: 'user',
-      rootDir: path.join(os.homedir(), '.cursor', 'skills'),
-      commandPrefix: '/',
-    };
-  }
 }

@@ -45,12 +45,10 @@
     "removeFromFavorites": "Favorilerden çıkar",
     "editSessionName": "Oturum adını elle düzenle",
     "deleteSession": "Bu oturumu kalıcı olarak sil",
-    "activeSessionIndicator": "Yakın zamanda etkin oturum (son 10 dakika)",
     "save": "Kaydet",
     "cancel": "İptal",
     "clearSearch": "Aramayı temizle",
-    "openCommandPalette": "Komut paletini aç",
-    "attentionRequiredIndicator": "Oturum ilgi bekliyor"
+    "openCommandPalette": "Komut paletini aç"
   },
   "navigation": {
     "chat": "Sohbet",
@@ -107,17 +105,10 @@
     "deleteProjectFailed": "Proje kaldırılamadı. Lütfen tekrar dene.",
     "deleteProjectError": "Proje kaldırılırken hata oluştu. Lütfen tekrar dene.",
     "createProjectFailed": "Proje oluşturulamadı. Lütfen tekrar dene.",
-    "createProjectError": "Proje oluşturulurken hata oluştu. Lütfen tekrar dene.",
-    "updateProjectError": "Proje güncellenirken hata oluştu. Lütfen tekrar dene.",
-    "refreshError": "Yenileme başarısız. Lütfen tekrar dene.",
-    "restoreProjectFailed": "Proje geri yüklenemedi. Lütfen tekrar dene.",
-    "restoreProjectError": "Proje geri yüklenirken hata oluştu. Lütfen tekrar dene.",
-    "restoreSessionFailed": "Oturum geri yüklenemedi. Lütfen tekrar dene.",
-    "restoreSessionError": "Oturum geri yüklenirken hata oluştu. Lütfen tekrar dene."
+    "createProjectError": "Proje oluşturulurken hata oluştu. Lütfen tekrar dene."
   },
   "version": {
-    "updateAvailable": "Güncelleme mevcut",
-    "restartRequired": "Güncelleme yüklendi — uygulamak için sunucuyu yeniden başlatın"
+    "updateAvailable": "Güncelleme mevcut"
   },
   "search": {
     "modeProjects": "Projeler",

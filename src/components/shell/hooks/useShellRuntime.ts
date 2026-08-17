@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
-
 import type { UseShellRuntimeOptions, UseShellRuntimeResult } from '../types/types';
-
+import { copyTextToClipboard } from '../../../utils/clipboard';
 import { useShellConnection } from './useShellConnection';
 import { useShellTerminal } from './useShellTerminal';
 
@@ -23,11 +22,15 @@ export function useShellRuntime({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const [authUrl, setAuthUrl] = useState('');
+  const [authUrlVersion, setAuthUrlVersion] = useState(0);
+
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const onProcessCompleteRef = useRef(onProcessComplete);
+  const authUrlRef = useRef('');
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
   // Keep mutable values in refs so websocket handlers always read current data.
@@ -38,6 +41,12 @@ export function useShellRuntime({
     isPlainShellRef.current = isPlainShell;
     onProcessCompleteRef.current = onProcessComplete;
   }, [selectedProject, selectedSession, initialCommand, isPlainShell, onProcessComplete]);
+
+  const setCurrentAuthUrl = useCallback((nextAuthUrl: string) => {
+    authUrlRef.current = nextAuthUrl;
+    setAuthUrl(nextAuthUrl);
+    setAuthUrlVersion((previous) => previous + 1);
+  }, []);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -55,6 +64,32 @@ export function useShellRuntime({
     wsRef.current = null;
   }, []);
 
+  const openAuthUrlInBrowser = useCallback((url = authUrlRef.current) => {
+    if (!url) {
+      return false;
+    }
+
+    const popup = window.open(url, '_blank');
+    if (popup) {
+      try {
+        popup.opener = null;
+      } catch {
+        // Ignore cross-origin restrictions when trying to null opener.
+      }
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const copyAuthUrlToClipboard = useCallback(async (url = authUrlRef.current) => {
+    if (!url) {
+      return false;
+    }
+
+    return copyTextToClipboard(url);
+  }, []);
+
   const { isInitialized, clearTerminalScreen, disposeTerminal } = useShellTerminal({
     terminalContainerRef,
     terminalRef,
@@ -63,6 +98,10 @@ export function useShellRuntime({
     selectedProject,
     minimal,
     isRestarting,
+    initialCommandRef,
+    isPlainShellRef,
+    authUrlRef,
+    copyAuthUrlToClipboard,
     closeSocket,
   });
 
@@ -79,6 +118,7 @@ export function useShellRuntime({
     autoConnect,
     closeSocket,
     clearTerminalScreen,
+    setAuthUrl: setCurrentAuthUrl,
     onOutputRef,
   });
 
@@ -87,7 +127,7 @@ export function useShellRuntime({
       return;
     }
 
-    disconnectFromShell({ suppressAutoConnect: true });
+    disconnectFromShell();
     disposeTerminal();
   }, [disconnectFromShell, disposeTerminal, isRestarting]);
 
@@ -116,7 +156,11 @@ export function useShellRuntime({
     isConnected,
     isInitialized,
     isConnecting,
+    authUrl,
+    authUrlVersion,
     connectToShell,
     disconnectFromShell,
+    openAuthUrlInBrowser,
+    copyAuthUrlToClipboard,
   };
 }

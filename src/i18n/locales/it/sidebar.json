@@ -45,12 +45,10 @@
     "removeFromFavorites": "Rimuovi dai preferiti",
     "editSessionName": "Modifica manualmente il nome della sessione",
     "deleteSession": "Elimina questa sessione permanentemente",
-    "activeSessionIndicator": "Sessione attiva di recente (ultimi 10 minuti)",
     "save": "Salva",
     "cancel": "Annulla",
     "clearSearch": "Cancella ricerca",
-    "openCommandPalette": "Apri tavolozza comandi",
-    "attentionRequiredIndicator": "La sessione richiede attenzione"
+    "openCommandPalette": "Apri tavolozza comandi"
   },
   "navigation": {
     "chat": "Chat",
@@ -107,17 +105,10 @@
     "deleteProjectFailed": "Impossibile rimuovere il progetto. Riprova.",
     "deleteProjectError": "Errore durante la rimozione del progetto. Riprova.",
     "createProjectFailed": "Impossibile creare il progetto. Riprova.",
-    "createProjectError": "Errore durante la creazione del progetto. Riprova.",
-    "updateProjectError": "Errore durante l'aggiornamento del progetto. Riprova.",
-    "refreshError": "Aggiornamento non riuscito. Riprova.",
-    "restoreProjectFailed": "Impossibile ripristinare il progetto. Riprova.",
-    "restoreProjectError": "Errore durante il ripristino del progetto. Riprova.",
-    "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
-    "restoreSessionError": "Errore durante il ripristino della sessione. Riprova."
+    "createProjectError": "Errore durante la creazione del progetto. Riprova."
   },
   "version": {
-    "updateAvailable": "Aggiornamento disponibile",
-    "restartRequired": "Aggiornamento installato — riavvia il server per applicarlo"
+    "updateAvailable": "Aggiornamento disponibile"
   },
   "search": {
     "modeProjects": "Progetti",

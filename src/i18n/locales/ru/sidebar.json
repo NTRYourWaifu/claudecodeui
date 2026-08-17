@@ -45,12 +45,10 @@
     "removeFromFavorites": "Удалить из избранного",
     "editSessionName": "Вручную редактировать имя сеанса",
     "deleteSession": "Удалить этот сеанс навсегда",
-    "activeSessionIndicator": "Недавно активный сеанс (последние 10 минут)",
     "save": "Сохранить",
     "cancel": "Отмена",
     "clearSearch": "Очистить поиск",
-    "openCommandPalette": "Открыть палитру команд",
-    "attentionRequiredIndicator": "Сессия требует внимания"
+    "openCommandPalette": "Открыть палитру команд"
   },
   "navigation": {
     "chat": "Чат",
@@ -107,17 +105,10 @@
     "deleteProjectFailed": "Не удалось убрать проект. Попробуйте снова.",
     "deleteProjectError": "Ошибка при удалении проекта из списка. Попробуйте снова.",
     "createProjectFailed": "Не удалось создать проект. Попробуйте снова.",
-    "createProjectError": "Ошибка при создании проекта. Попробуйте снова.",
-    "updateProjectError": "Ошибка при обновлении проекта. Попробуйте снова.",
-    "refreshError": "Не удалось обновить. Попробуйте снова.",
-    "restoreProjectFailed": "Не удалось восстановить проект. Попробуйте снова.",
-    "restoreProjectError": "Ошибка при восстановлении проекта. Попробуйте снова.",
-    "restoreSessionFailed": "Не удалось восстановить сеанс. Попробуйте снова.",
-    "restoreSessionError": "Ошибка при восстановлении сеанса. Попробуйте снова."
+    "createProjectError": "Ошибка при создании проекта. Попробуйте снова."
   },
   "version": {
-    "updateAvailable": "Доступно обновление",
-    "restartRequired": "Обновление установлено — перезапустите сервер для применения"
+    "updateAvailable": "Доступно обновление"
   },
   "search": {
     "modeProjects": "Проекты",
