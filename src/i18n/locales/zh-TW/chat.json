@@ -158,7 +158,16 @@
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
     "clearInput": "清空输入",
-    "scrollToBottom": "滚动到底部"
+    "scrollToBottom": "滚动到底部",
+    "compactHint": "context 還剩 {{percent}}%，點一下立即壓縮",
+    "compactAria": "壓縮對話以釋放 context",
+    "addContext": "加入內容",
+    "composerSettings": "模型、思考強度與權限",
+    "permissionMode": "權限",
+    "model": "模型",
+    "effort": "思考強度",
+    "thinking": "自適應思考",
+    "contextUsage": "已用 context"
   },
   "thinkingMode": {
     "selector": {

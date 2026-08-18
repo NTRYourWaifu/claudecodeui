@@ -12,6 +12,7 @@ import {
 } from '../../constants/composerControls';
 import { useUpwardPopover } from '../../hooks/useUpwardPopover';
 import AccountUsagePanel from './AccountUsagePanel';
+import CompactContextButton from './CompactContextButton';
 import TokenUsagePie from './TokenUsagePie';
 
 type ComposerToolbarProps = {
@@ -31,6 +32,8 @@ type ComposerToolbarProps = {
   openImagePicker: () => void;
   hasInput: boolean;
   onClearInput: () => void;
+  onCompactContext: () => void;
+  isLoading: boolean;
 };
 
 const MENU_PANEL_CLASS =
@@ -69,6 +72,8 @@ export default function ComposerToolbar({
   openImagePicker,
   hasInput,
   onClearInput,
+  onCompactContext,
+  isLoading,
 }: ComposerToolbarProps) {
   const { t } = useTranslation('chat');
   const [addOpen, setAddOpen] = useState(false);
@@ -127,6 +132,17 @@ export default function ComposerToolbar({
         </button>
       </div>
 
+      <div className="flex items-center gap-1">
+      {/* Surfaces itself only when the context is filling up. */}
+      {isClaude && (
+        <CompactContextButton
+          used={used}
+          total={total}
+          onCompact={onCompactContext}
+          disabled={isLoading}
+        />
+      )}
+
       {/* Right: one settings menu, labelled with the state it controls */}
       <button
         ref={settingsMenu.triggerRef}
@@ -141,6 +157,7 @@ export default function ComposerToolbar({
         {isClaude && <span className="hidden truncate font-medium sm:inline">{modelLabel}</span>}
         <SlidersHorizontal className="h-3 w-3 flex-shrink-0 opacity-60" />
       </button>
+      </div>
 
       {addOpen && typeof document !== 'undefined' && createPortal(
         <div

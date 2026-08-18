@@ -169,6 +169,7 @@ function ChatInterface({
     handleTextareaInput,
     syncInputOverlayScroll,
     handleClearInput,
+    compactContext,
     handleAbortSession,
     handlePermissionDecision,
     handleGrantToolPermission,
@@ -376,6 +377,7 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
+          onCompactContext={compactContext}
           isUserScrolledUp={isUserScrolledUp}
           hasMessages={chatMessages.length > 0}
           onScrollToBottom={scrollToBottomAndReset}

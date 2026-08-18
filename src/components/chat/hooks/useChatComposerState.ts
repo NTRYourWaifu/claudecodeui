@@ -301,6 +301,26 @@ export function useChatComposerState({
     }, 0);
   }, [addMessage]);
 
+  /**
+   * Compacts the conversation to reclaim context.
+   *
+   * Submits `/compact` as an ordinary message so Claude Code handles it
+   * natively — it summarises the conversation and actually frees context,
+   * which is not something this app could reproduce by prompting.
+   */
+  const compactContext = useCallback(() => {
+    if (isLoading) return;
+
+    setInput('/compact');
+    inputValueRef.current = '/compact';
+
+    // Same deferral as the command runner above: let the text land in the UI
+    // before dispatching, so the sent message reads correctly.
+    setTimeout(() => {
+      handleSubmitRef.current?.(createFakeSubmitEvent());
+    }, 0);
+  }, [isLoading]);
+
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string) => {
       if (!command || !selectedProject) {
@@ -516,7 +536,12 @@ export function useChatComposerState({
         const firstSpace = commandInput.indexOf(' ');
         const commandName = firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
+        // Claude Code implements /compact itself and actually frees context by
+        // summarising the conversation. Intercepting it would replace that with
+        // a prompt that merely asks for a summary — the transcript would keep
+        // every original message and nothing would be reclaimed. Let it through.
+        const handledByProvider = provider === 'claude' && commandName === '/compact';
+        if (matchedCommand && matchedCommand.type !== 'skill' && !handledByProvider) {
           executeCommand(matchedCommand, commandInput);
           setInput('');
           inputValueRef.current = '';
@@ -1028,6 +1053,7 @@ export function useChatComposerState({
     isDragActive,
     openImagePicker: open,
     handleSubmit,
+    compactContext,
     handleInputChange,
     handleKeyDown,
     handlePaste,

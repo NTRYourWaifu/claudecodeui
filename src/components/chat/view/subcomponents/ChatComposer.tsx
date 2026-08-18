@@ -69,6 +69,7 @@ interface ChatComposerProps {
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
+  onCompactContext: () => void;
   isUserScrolledUp: boolean;
   hasMessages: boolean;
   onScrollToBottom: () => void;
@@ -129,6 +130,7 @@ export default function ChatComposer({
   onToggleCommandMenu,
   hasInput,
   onClearInput,
+  onCompactContext,
   isUserScrolledUp,
   hasMessages,
   onScrollToBottom,
@@ -342,6 +344,8 @@ export default function ChatComposer({
               openImagePicker={openImagePicker}
               hasInput={hasInput}
               onClearInput={onClearInput}
+              onCompactContext={onCompactContext}
+              isLoading={isLoading}
             />
           </PromptInputTools>
 

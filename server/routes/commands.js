@@ -444,6 +444,11 @@ Custom commands can be created in:
 
   // 以下指令沒有原生 server 動作 — 它們本質上是「prompt template」
   // 直接送回前端、由前端把對應 prompt 灌進輸入框並送 SDK
+  //
+  // /compact 不在此列：Claude Code 自己就實作了它，而且是真的釋放 context
+  // （SDK 回報 "Free up context by summarizing the conversation so far"）。
+  // 前端對 claude provider 不攔截這個指令，直接讓 SDK 處理，所以這裡的
+  // fallback 只有在非 claude provider 或前端邏輯改動時才會走到。
   '/compact': async () => ({
     type: 'builtin',
     action: 'inject-prompt',

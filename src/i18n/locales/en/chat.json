@@ -165,7 +165,16 @@
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
     "clearInput": "Clear input",
-    "scrollToBottom": "Scroll to bottom"
+    "scrollToBottom": "Scroll to bottom",
+    "compactHint": "{{percent}}% of context remaining. Click to compact now.",
+    "compactAria": "Compact conversation to free up context",
+    "addContext": "Add context",
+    "composerSettings": "Model, effort and permissions",
+    "permissionMode": "Permissions",
+    "model": "Model",
+    "effort": "Effort",
+    "thinking": "Adaptive thinking",
+    "contextUsage": "Context used"
   },
   "thinkingMode": {
     "selector": {
