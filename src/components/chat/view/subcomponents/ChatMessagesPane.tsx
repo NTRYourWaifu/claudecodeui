@@ -6,6 +6,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../../types/app
 import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
+import ConversationScrollMarks from './ConversationScrollMarks';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -249,6 +250,11 @@ export default function ChatMessagesPane({
               />
             );
           })}
+
+          <ConversationScrollMarks
+            scrollContainerRef={scrollContainerRef}
+            messageSignature={`${visibleMessages.length}:${chatMessages.length}`}
+          />
         </>
       )}
     </div>

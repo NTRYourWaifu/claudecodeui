@@ -31,10 +31,52 @@ interface UseChatSessionStateArgs {
   sessionStore: SessionStore;
 }
 
+/**
+ * Anchors the viewport to a specific message element rather than to a scroll
+ * height.
+ *
+ * Restoring by height delta (`scrollTop += newHeight - oldHeight`) assumes the
+ * prepended content has reached its final height by the time the measurement
+ * runs. It has not: markdown, code blocks and images settle a frame or more
+ * later, so the delta is short and the view lands somewhere earlier in the
+ * conversation. Holding a specific element still is immune to that, because
+ * the element is re-measured after the growth rather than before it.
+ *
+ * Message keys are stable across prepends, so React keeps the same DOM node
+ * and this reference survives the re-render.
+ */
 interface ScrollRestoreState {
-  height: number;
-  top: number;
+  anchorEl: HTMLElement;
+  /** Anchor's offset from the top of the scroll container, in px. */
+  anchorTop: number;
+  /** Scroll position when the anchor was taken, to detect deliberate moves. */
+  scrollTopAtCapture: number;
 }
+
+/** Captures the topmost message still visible, to be held in place. */
+function captureScrollAnchor(container: HTMLDivElement): ScrollRestoreState | null {
+  const containerTop = container.getBoundingClientRect().top;
+  for (const child of Array.from(container.children)) {
+    if (!(child instanceof HTMLElement)) continue;
+    const rect = child.getBoundingClientRect();
+    if (rect.bottom > containerTop) {
+      return { anchorEl: child, anchorTop: rect.top - containerTop, scrollTopAtCapture: container.scrollTop };
+    }
+  }
+  return null;
+}
+
+/**
+ * How far the view may drift between capturing an anchor and restoring it
+ * before the restore is abandoned.
+ *
+ * Restoring exists to cancel out content being prepended, not to fight a
+ * deliberate move. Loading earlier messages is triggered near the top of the
+ * list, which is exactly where someone is likely to jump elsewhere (via the
+ * conversation rail, or search) while the fetch is still in flight — and
+ * restoring then would drag them straight back.
+ */
+const SCROLL_RESTORE_ABANDON_PX = 120;
 
 /* ------------------------------------------------------------------ */
 /*  Helper: Convert a ChatMessage to a NormalizedMessage for the store */
@@ -129,6 +171,11 @@ export function useChatSessionState({
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
+  // Mirrors isUserScrolledUp. The state version lags by a render, and the
+  // auto-scroll below fires on a timer, so reading state there could still see
+  // "at the bottom" after the user had already scrolled away — and yank them
+  // back down. The ref is current the moment the scroll event fires.
+  const userScrolledUpRef = useRef(false);
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
@@ -321,8 +368,7 @@ export function useChatSessionState({
       const sessionProvider = selectedSession.__provider || 'claude';
 
       isLoadingMoreRef.current = true;
-      const previousScrollHeight = container.scrollHeight;
-      const previousScrollTop = container.scrollTop;
+      const anchor = captureScrollAnchor(container);
 
       try {
         const slot = await sessionStore.fetchMore(selectedSession.id, {
@@ -334,7 +380,7 @@ export function useChatSessionState({
         });
         if (!slot || slot.serverMessages.length === 0) return false;
 
-        pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
+        pendingScrollRestoreRef.current = anchor;
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         setVisibleMessageCount((prev) => prev + MESSAGES_PER_PAGE);
@@ -351,6 +397,7 @@ export function useChatSessionState({
     if (!container) return;
 
     const nearBottom = isNearBottom();
+    userScrolledUpRef.current = !nearBottom;
     setIsUserScrolledUp(!nearBottom);
 
     if (!allMessagesLoadedRef.current) {
@@ -366,12 +413,45 @@ export function useChatSessionState({
   }, [isNearBottom, loadOlderMessages]);
 
   useLayoutEffect(() => {
-    if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
-    const { height, top } = pendingScrollRestoreRef.current;
+    const restore = pendingScrollRestoreRef.current;
     const container = scrollContainerRef.current;
-    const newScrollHeight = container.scrollHeight;
-    container.scrollTop = top + Math.max(newScrollHeight - height, 0);
+    if (!restore || !container) return undefined;
+
     pendingScrollRestoreRef.current = null;
+    const { anchorEl, anchorTop, scrollTopAtCapture } = restore;
+
+    // Tracks where this effect believes the view should be. Corrections it
+    // makes itself update it, so its own adjustments are not mistaken for the
+    // deliberate move it is watching for.
+    let expectedScrollTop = scrollTopAtCapture;
+
+    const holdAnchorStill = () => {
+      if (!container.contains(anchorEl)) return;
+      // Someone moved the view on purpose while the fetch was in flight.
+      if (Math.abs(container.scrollTop - expectedScrollTop) > SCROLL_RESTORE_ABANDON_PX) return;
+
+      const currentTop = anchorEl.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      const drift = currentTop - anchorTop;
+      if (Math.abs(drift) > 0.5) {
+        container.scrollTop += drift;
+        expectedScrollTop = container.scrollTop;
+      }
+    };
+
+    holdAnchorStill();
+
+    // Prepended markdown, code blocks and images finish laying out over the
+    // next frames, each shifting the anchor again. Re-correct while that
+    // settles instead of trusting the first measurement.
+    let frame = 0;
+    let rafId = 0;
+    const settle = () => {
+      holdAnchorStill();
+      if (++frame < 6) rafId = window.requestAnimationFrame(settle);
+    };
+    rafId = window.requestAnimationFrame(settle);
+
+    return () => window.cancelAnimationFrame(rafId);
   }, [chatMessages.length]);
 
   // Reset scroll/pagination state on session change
@@ -668,8 +748,13 @@ export function useChatSessionState({
     if (searchScrollActiveRef.current) return;
 
     if (autoScrollToBottom) {
-      if (!isUserScrolledUp) setTimeout(() => scrollToBottom(), 50);
-      return;
+      if (userScrolledUpRef.current) return undefined;
+      // Re-check on fire: the user may have started scrolling during the delay,
+      // and following them down mid-gesture is the thing being avoided here.
+      const timer = setTimeout(() => {
+        if (!userScrolledUpRef.current) scrollToBottom();
+      }, 50);
+      return () => clearTimeout(timer);
     }
 
     const container = scrollContainerRef.current;
@@ -727,8 +812,7 @@ export function useChatSessionState({
     setShowLoadAllOverlay(true);
 
     const container = scrollContainerRef.current;
-    const previousScrollHeight = container ? container.scrollHeight : 0;
-    const previousScrollTop = container ? container.scrollTop : 0;
+    const anchor = container ? captureScrollAnchor(container) : null;
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
@@ -742,9 +826,7 @@ export function useChatSessionState({
       if (currentSessionId !== requestSessionId) return;
 
       if (slot) {
-        if (container) {
-          pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
-        }
+        pendingScrollRestoreRef.current = anchor;
 
         setHasMoreMessages(false);
         setTotalMessages(slot.total);
