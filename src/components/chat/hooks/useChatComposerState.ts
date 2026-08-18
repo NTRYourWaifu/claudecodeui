@@ -11,6 +11,7 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 
+import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { authenticatedFetch } from '../../../utils/api';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
@@ -131,6 +132,10 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  // Reuse the app-wide breakpoint rather than introducing a second definition
+  // of "mobile"; this is the same hook App uses to drive its own isMobile prop.
+  const { isMobile } = useDeviceSettings({ trackPWA: false });
+
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       // Draft inputs are keyed by the DB projectId so per-project drafts
@@ -833,7 +838,18 @@ export function useChatComposerState({
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
-        } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
+        } else if (
+          !event.shiftKey &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !sendByCtrlEnter &&
+          // On phones a bare Enter must insert a newline, never send. Mobile
+          // keyboards (e.g. Gboard) offer no Shift+Enter, so treating Enter as
+          // "submit" makes multi-line input impossible there — the send button
+          // is the only intended way to submit on mobile. Desktop keeps the
+          // existing behaviour, where Shift+Enter is available for newlines.
+          !isMobile
+        ) {
           event.preventDefault();
           handleSubmit(event);
         }
@@ -844,6 +860,7 @@ export function useChatComposerState({
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleSubmit,
+      isMobile,
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,

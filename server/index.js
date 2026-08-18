@@ -16,6 +16,7 @@ import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/provi
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
+import { getClaudeContextWindow } from '../shared/modelConstants.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
@@ -221,78 +222,26 @@ app.use(express.static(path.join(APP_ROOT, 'dist'), {
 // /api/config endpoint removed - no longer needed
 // Frontend now uses window.location for WebSocket URLs
 
-// System update endpoint
-app.post('/api/system/update', authenticateToken, async (req, res) => {
-    try {
-        // Get the project root directory (parent of server directory)
-        const projectRoot = APP_ROOT;
-
-        console.log('Starting system update from directory:', projectRoot);
-
-        // Platform deployments use their own update workflow from the project root.
-        const updateCommand = IS_PLATFORM
-        // In platform, husky and dev dependencies are not needed
-            ? 'npm run update:platform'
-            : installMode === 'git'
-                ? 'git checkout main && git pull && npm install'
-                : 'npm install -g @cloudcli-ai/cloudcli@latest';
-
-        const updateCwd = IS_PLATFORM || installMode === 'git'
-            ? projectRoot
-            : os.homedir();
-
-        const child = spawn('sh', ['-c', updateCommand], {
-            cwd: updateCwd,
-            env: process.env
-        });
-
-        let output = '';
-        let errorOutput = '';
-
-        child.stdout.on('data', (data) => {
-            const text = data.toString();
-            output += text;
-            console.log('Update output:', text);
-        });
-
-        child.stderr.on('data', (data) => {
-            const text = data.toString();
-            errorOutput += text;
-            console.error('Update error:', text);
-        });
-
-        child.on('close', (code) => {
-            if (code === 0) {
-                res.json({
-                    success: true,
-                    output: output || 'Update completed successfully',
-                    message: 'Update completed. Please restart the server to apply changes.'
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    error: 'Update command failed',
-                    output: output,
-                    errorOutput: errorOutput
-                });
-            }
-        });
-
-        child.on('error', (error) => {
-            console.error('Update process error:', error);
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        });
-
-    } catch (error) {
-        console.error('System update error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
+// System update endpoint - DISABLED in this fork. See docs/待辦總表.md section 2.
+//
+// Upstream ran a git pull plus a dependency reinstall here. On this machine
+// that is destructive rather than helpful:
+//
+//   1. Reinstalling dependencies overwrites the cross-drive cwd patch inside
+//      node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs. Without that patch
+//      claude.exe cannot be spawned at all, so chat stops working entirely.
+//   2. This fork is ~161 commits behind upstream and carries local work on
+//      top, so pulling either conflicts or leaves a half-merged tree.
+//
+// The route is kept (rather than deleted) so a stale client that still calls
+// it gets an explicit, greppable refusal instead of a confusing 404.
+// Upstream changes are cherry-picked by hand - see docs/待辦總表.md section 12.
+app.post('/api/system/update', authenticateToken, (req, res) => {
+    console.warn('Refused /api/system/update: auto-update is disabled in this fork.');
+    res.status(410).json({
+        success: false,
+        error: 'Auto-update is disabled in this fork. Upstream changes are cherry-picked manually.',
+    });
 });
 
 const expandWorkspacePath = (inputPath) => {
@@ -1266,7 +1215,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         const lines = fileContent.trim().split('\n');
 
         const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
-        const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+        let sessionModel = null;
         let inputTokens = 0;
         let cacheCreationTokens = 0;
         let cacheReadTokens = 0;
@@ -1284,6 +1233,10 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     inputTokens = usage.input_tokens || 0;
                     cacheCreationTokens = usage.cache_creation_input_tokens || 0;
                     cacheReadTokens = usage.cache_read_input_tokens || 0;
+                    // The transcript records which model produced this reply, so
+                    // the gauge's denominator can follow the model actually used
+                    // rather than a fixed number.
+                    sessionModel = entry.message.model || null;
 
                     break; // Stop after finding the latest assistant message
                 }
@@ -1295,6 +1248,12 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
         // Calculate total context usage (excluding output_tokens, as per ccusage)
         const totalUsed = inputTokens + cacheCreationTokens + cacheReadTokens;
+
+        // CONTEXT_WINDOW still wins when set (deliberate per-machine budget cap);
+        // otherwise follow the model that actually produced the last reply.
+        const contextWindow = Number.isFinite(parsedContextWindow)
+            ? parsedContextWindow
+            : getClaudeContextWindow(sessionModel);
 
         res.json({
             used: totalUsed,

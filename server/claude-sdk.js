@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
-import { CLAUDE_MODELS } from '../shared/modelConstants.js';
+import { CLAUDE_MODELS, getClaudeContextWindow } from '../shared/modelConstants.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -321,16 +321,23 @@ function extractTokenBudget(resultMessage) {
   // Use cumulative tokens if available (tracks total for the session)
   // Otherwise fall back to per-request tokens
   const inputTokens = modelData.cumulativeInputTokens || modelData.inputTokens || 0;
-  const outputTokens = modelData.cumulativeOutputTokens || modelData.outputTokens || 0;
   const cacheReadTokens = modelData.cumulativeCacheReadInputTokens || modelData.cacheReadInputTokens || 0;
   const cacheCreationTokens = modelData.cumulativeCacheCreationInputTokens || modelData.cacheCreationInputTokens || 0;
 
-  // Total used = input + output + cache tokens
-  const totalUsed = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+  // Context occupancy excludes output tokens, matching ccusage and the
+  // /api/.../token-usage endpoint in server/index.js. Those two used to
+  // disagree — this one added output tokens, so the same session reported a
+  // different "used" figure depending on which path produced it.
+  const totalUsed = inputTokens + cacheReadTokens + cacheCreationTokens;
 
-  // Use configured context window budget from environment (default 160000)
-  // This is the user's budget limit, not the model's context window
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW) || 160000;
+  // Denominator follows the model actually in use (Opus/Sonnet 1M, Haiku 200k)
+  // instead of a hardcoded 160k. `modelKey` is the SDK's own model id for this
+  // usage entry. CONTEXT_WINDOW still overrides, for a deliberate per-machine
+  // budget cap that is intentionally lower than the model's real window.
+  const configuredContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+  const contextWindow = Number.isFinite(configuredContextWindow)
+    ? configuredContextWindow
+    : getClaudeContextWindow(modelKey);
 
   // Token calc logged via token-budget WS event
 

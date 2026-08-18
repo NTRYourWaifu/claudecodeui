@@ -142,3 +142,4 @@ tasks/
 
 # Git worktrees
 .worktrees/
+.playwright-mcp/

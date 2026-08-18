@@ -1,88 +1,45 @@
-import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 import { ReleaseInfo } from '../types/sharedTypes';
 
-/**
- * Compare two semantic version strings
- * Works only with numeric versions separated by dots (e.g. "1.2.3")
- * @param {string} v1 
- * @param {string} v2
- * @returns positive if v1 > v2, negative if v1 < v2, 0 if equal
- */
-const compareVersions = (v1: string, v2: string) => {
-  const parts1 = v1.split('.').map(Number);
-  const parts2 = v2.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 !== p2) return p1 - p2;
-  }
-  return 0;
-};
-
 export type InstallMode = 'git' | 'npm';
 
-export const useVersionCheck = (owner: string, repo: string) => {
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
-  const [installMode, setInstallMode] = useState<InstallMode>('git');
+type VersionCheckResult = {
+  updateAvailable: boolean;
+  latestVersion: string | null;
+  currentVersion: string;
+  releaseInfo: ReleaseInfo | null;
+  installMode: InstallMode;
+};
 
-  useEffect(() => {
-    const fetchInstallMode = async () => {
-      try {
-        const response = await fetch('/health');
-        const data = await response.json();
-        if (data.installMode === 'npm' || data.installMode === 'git') {
-          setInstallMode(data.installMode);
-        }
-      } catch {
-        // Default to git on error
-      }
-    };
-    fetchInstallMode();
-  }, []);
-
-  useEffect(() => {
-    const checkVersion = async () => {
-      try {
-        const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
-        const data = await response.json();
-
-        // Handle the case where there might not be any releases
-        if (data.tag_name) {
-          const latest = data.tag_name.replace(/^v/, '');
-          setLatestVersion(latest);
-          // Only show update if latest version is actually newer
-          setUpdateAvailable(compareVersions(latest, version) > 0);
-
-          // Store release information
-          setReleaseInfo({
-            title: data.name || data.tag_name,
-            body: data.body || '',
-            htmlUrl: data.html_url || `https://github.com/${owner}/${repo}/releases/latest`,
-            publishedAt: data.published_at
-          });
-        } else {
-          // No releases found, don't show update notification
-          setUpdateAvailable(false);
-          setLatestVersion(null);
-          setReleaseInfo(null);
-        }
-      } catch (error) {
-        console.error('Version check failed:', error);
-        // On error, don't show update notification
-        setUpdateAvailable(false);
-        setLatestVersion(null);
-        setReleaseInfo(null);
-      }
-    };
-
-    checkVersion();
-    const interval = setInterval(checkVersion, 5 * 60 * 1000); // Check every 5 minutes
-    return () => clearInterval(interval);
-  }, [owner, repo]);
-
-  return { updateAvailable, latestVersion, currentVersion: version, releaseInfo, installMode };
-}; 
+/**
+ * Auto-update is DISABLED in this fork. See docs/待辦總表.md section 2.
+ *
+ * Upstream's update flow runs `git checkout main && git pull && npm install` on
+ * the server (server/index.js, /api/system/update). On this machine that is
+ * destructive rather than helpful:
+ *
+ *   1. Reinstalling dependencies overwrites the cross-drive cwd patch inside
+ *      node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs. Without that patch
+ *      claude.exe cannot be spawned at all, so chat stops working entirely.
+ *   2. This fork is ~161 commits behind upstream and carries local work on top,
+ *      so pulling either conflicts or leaves a half-merged tree.
+ *
+ * Rather than delete the version UI wholesale, this hook is reduced to a stub
+ * that reports "no update available". Every downstream consumer (sidebar
+ * banner, upgrade modal trigger, settings tabs) then renders nothing on its
+ * own, and the *displayed* version number keeps working.
+ *
+ * The explicit return type matters: without it TypeScript narrows the literal
+ * `false`/`null` values and callers such as AboutTab fail to compile against a
+ * `never`-typed releaseInfo.
+ *
+ * Upstream changes are cherry-picked by hand instead — see docs/待辦總表.md
+ * section 12 for the audited candidate list.
+ */
+export const useVersionCheck = (_owner: string, _repo: string): VersionCheckResult => ({
+  updateAvailable: false,
+  latestVersion: null,
+  currentVersion: version,
+  releaseInfo: null,
+  installMode: 'git',
+});

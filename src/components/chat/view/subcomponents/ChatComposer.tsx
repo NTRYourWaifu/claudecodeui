@@ -12,6 +12,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { getClaudeContextWindow } from '../../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
@@ -349,7 +350,17 @@ export default function ChatComposer({
               </>
             )}
 
-            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+            <TokenUsagePie
+              used={tokenBudget?.used || 0}
+              // Fallback only — the server normally supplies `total`. Follow the
+              // selected model here too, so the gauge never briefly shows a
+              // denominator that contradicts what the server is about to send.
+              total={
+                tokenBudget?.total
+                || parseInt(import.meta.env.VITE_CONTEXT_WINDOW)
+                || getClaudeContextWindow(claudeModel)
+              }
+            />
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}

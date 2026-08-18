@@ -24,6 +24,45 @@ export const CLAUDE_MODELS = {
 };
 
 /**
+ * Context window sizes, in tokens, used as the denominator of the context
+ * usage gauge.
+ *
+ * These are matched by substring rather than by exact id on purpose: the ids
+ * that actually arrive at runtime carry date suffixes (e.g. the key of the
+ * SDK's `modelUsage` map, or the `model` field inside a transcript line), and
+ * an exact-match table silently falls back to the default every time a new
+ * dated build ships.
+ *
+ * Order matters — the first matching entry wins.
+ */
+const CLAUDE_CONTEXT_WINDOW_RULES = [
+  { match: "haiku", contextWindow: 200_000 },
+  { match: "opus", contextWindow: 1_000_000 },
+  { match: "sonnet", contextWindow: 1_000_000 },
+];
+
+/** Used when the model is unknown/absent. Deliberately the smaller value: */
+/** under-reporting the budget is safer than claiming headroom that isn't there. */
+export const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
+
+/**
+ * Resolve the context window for a Claude model id.
+ *
+ * `CONTEXT_WINDOW` in the environment still wins when set, so a deliberate
+ * per-machine budget override keeps working; it is read by the callers rather
+ * than here so this stays a pure function.
+ *
+ * @param {string | null | undefined} model
+ * @returns {number} context window in tokens
+ */
+export function getClaudeContextWindow(model) {
+  if (!model || typeof model !== "string") return DEFAULT_CLAUDE_CONTEXT_WINDOW;
+  const normalized = model.toLowerCase();
+  const rule = CLAUDE_CONTEXT_WINDOW_RULES.find((candidate) => normalized.includes(candidate.match));
+  return rule ? rule.contextWindow : DEFAULT_CLAUDE_CONTEXT_WINDOW;
+}
+
+/**
  * Cursor Models
  */
 export const CURSOR_MODELS = {
