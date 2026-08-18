@@ -4,7 +4,7 @@ import path from 'path';
 
 import express from 'express';
 
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, getClaudeContextWindow } from '../../shared/modelConstants.js';
 import { parseFrontMatter } from '../shared/frontmatter.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
@@ -263,12 +263,14 @@ Custom commands can be created in:
           : CLAUDE_MODELS.DEFAULT);
 
     const used = Number(tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0) || 0;
+    // Same rule as the gauge and the token-usage endpoint: follow the model
+    // rather than a fixed number, with CONTEXT_WINDOW as a deliberate override.
     const total =
       Number(
         tokenUsage.total ??
           tokenUsage.contextWindow ??
-          parseInt(process.env.CONTEXT_WINDOW || '160000', 10),
-      ) || 160000;
+          parseInt(process.env.CONTEXT_WINDOW, 10),
+      ) || getClaudeContextWindow(model);
     const percentage = total > 0 ? Number(((used / total) * 100).toFixed(1)) : 0;
 
     const inputTokensRaw =
@@ -449,7 +451,7 @@ Custom commands can be created in:
   }),
   '/context': async (args, context) => {
     const used = Number(context?.tokenUsage?.used ?? 0);
-    const total = Number(context?.tokenUsage?.total ?? 0) || 160000;
+    const total = Number(context?.tokenUsage?.total ?? 0) || getClaudeContextWindow(context?.model);
     const pct = total > 0 ? ((used / total) * 100).toFixed(1) : '0';
     return {
       type: 'builtin',
@@ -459,7 +461,7 @@ Custom commands can be created in:
   },
   '/usage': async (args, context) => {
     const used = Number(context?.tokenUsage?.used ?? 0);
-    const total = Number(context?.tokenUsage?.total ?? 0) || 160000;
+    const total = Number(context?.tokenUsage?.total ?? 0) || getClaudeContextWindow(context?.model);
     const pct = total > 0 ? ((used / total) * 100).toFixed(1) : '0';
     return {
       type: 'builtin',
