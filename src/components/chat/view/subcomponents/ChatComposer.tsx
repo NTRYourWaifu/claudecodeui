@@ -11,17 +11,14 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { ArrowDownIcon } from 'lucide-react';
 import { getClaudeContextWindow } from '../../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
-import { AccountUsageButton } from './AccountUsagePanel';
-import ClaudeQuickControls from './ClaudeQuickControls';
-import PermissionModeSelector from './PermissionModeSelector';
-import TokenUsagePie from './TokenUsagePie';
+import ComposerToolbar from './ComposerToolbar';
 import {
   PromptInput,
   PromptInputHeader,
@@ -29,7 +26,6 @@ import {
   PromptInputTextarea,
   PromptInputFooter,
   PromptInputTools,
-  PromptInputButton,
   PromptInputSubmit,
 } from '../../../../shared/view/ui';
 
@@ -323,70 +319,30 @@ export default function ChatComposer({
 
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputButton
-              tooltip={{ content: t('input.attachImages') }}
-              onClick={openImagePicker}
-            >
-              <ImageIcon />
-            </PromptInputButton>
-
-            <PermissionModeSelector
-              permissionMode={permissionMode}
-              onModeChange={onPermissionModeChange}
-              provider={provider}
-            />
-
-            {provider === 'claude' && (
-              <>
-                <ClaudeQuickControls
-                  model={claudeModel}
-                  onModelChange={setClaudeModel}
-                  thinkingEnabled={thinkingEnabled}
-                  onThinkingChange={setThinkingEnabled}
-                  effort={effort}
-                  onEffortChange={setEffort}
-                />
-                <AccountUsageButton />
-              </>
-            )}
-
-            <TokenUsagePie
-              used={tokenBudget?.used || 0}
+            <ComposerToolbar
+              provider={String(provider)}
+              permissionMode={String(permissionMode)}
+              onPermissionModeChange={onPermissionModeChange}
+              claudeModel={claudeModel}
+              setClaudeModel={setClaudeModel}
+              effort={effort}
+              setEffort={setEffort}
+              thinkingEnabled={thinkingEnabled}
+              setThinkingEnabled={setThinkingEnabled}
+              tokenBudget={tokenBudget}
               // Fallback only — the server normally supplies `total`. Follow the
               // selected model here too, so the gauge never briefly shows a
               // denominator that contradicts what the server is about to send.
-              total={
-                tokenBudget?.total
-                || parseInt(import.meta.env.VITE_CONTEXT_WINDOW)
+              contextWindowFallback={
+                parseInt(import.meta.env.VITE_CONTEXT_WINDOW)
                 || getClaudeContextWindow(claudeModel)
               }
+              slashCommandsCount={slashCommandsCount}
+              onToggleCommandMenu={onToggleCommandMenu}
+              openImagePicker={openImagePicker}
+              hasInput={hasInput}
+              onClearInput={onClearInput}
             />
-
-            <PromptInputButton
-              tooltip={{ content: t('input.showAllCommands') }}
-              onClick={onToggleCommandMenu}
-              className="relative"
-            >
-              <MessageSquareIcon />
-              {slashCommandsCount > 0 && (
-                <span
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
-                >
-                  {slashCommandsCount}
-                </span>
-              )}
-            </PromptInputButton>
-
-            {hasInput && (
-              <PromptInputButton
-                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
-                onClick={onClearInput}
-                className="hidden sm:No-flex"
-              >
-                <XIcon />
-              </PromptInputButton>
-            )}
-
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
