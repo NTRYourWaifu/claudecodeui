@@ -121,7 +121,7 @@ export default function SidebarProjectItem({
         <div className="md:hidden">
           <div
             className={cn(
-              'p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150',
+              'px-2.5 py-2 mx-2 my-0.5 rounded-md bg-card border border-border/50 active:scale-[0.98] transition-all duration-150',
               isSelected && 'bg-primary/5 border-primary/20',
               isStarred &&
                 !isSelected &&
@@ -130,7 +130,7 @@ export default function SidebarProjectItem({
             onClick={toggleProject}
           >
             <div className="flex items-center justify-between">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
                 <div
                   className={cn(
                     'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',

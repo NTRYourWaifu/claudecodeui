@@ -119,7 +119,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       {message.type === 'user' ? (
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+          <div className="group flex-1 rounded-lg rounded-br-sm bg-primary px-3 py-1.5 text-primary-foreground shadow-sm sm:flex-initial sm:px-3.5">
             <div className="whitespace-pre-wrap break-words text-sm">
               {message.content}
             </div>
@@ -136,7 +136,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                 ))}
               </div>
             )}
-            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+            <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-primary-foreground/70">
               {shouldShowUserCopyControl && (
                 <MessageCopyControl content={userCopyContent} messageType="user" />
               )}
@@ -144,7 +144,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
+            <div className="hidden h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground sm:flex">
               U
             </div>
           )}
@@ -161,7 +161,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
           {!isGrouped && (
-            <div className="mb-2 flex items-center space-x-3">
+            <div className="mb-1 flex items-center space-x-2">
               {message.type === 'error' ? (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-sm text-white">
                   !

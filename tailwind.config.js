@@ -1,3 +1,5 @@
+import colors from 'tailwindcss/colors';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
@@ -15,6 +17,13 @@ export default {
     },
     extend: {
       colors: {
+        // Tailwind's default `gray` is a cool, blue-leaning grey, and the app
+        // uses gray-* in hundreds of places (panels, borders, secondary text).
+        // Those alone kept the UI reading as blue-tinted even after the theme
+        // tokens moved to Claude Code's warm palette. `stone` is Tailwind's
+        // warm neutral, so remapping the scale re-tints all of them at once
+        // instead of touching every call site.
+        gray: colors.stone,
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
