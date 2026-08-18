@@ -54,6 +54,9 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   status,
 }) => {
   const [copied, setCopied] = useState(false);
+  // `wrapText` now seeds the initial state rather than forcing wrapping forever,
+  // so a config can still opt into "show it all up front" where that reads better.
+  const [isExpanded, setIsExpanded] = useState(wrapText);
   const isTerminal = style === 'terminal';
 
   const handleAction = async () => {
@@ -88,6 +91,10 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
 
   // Terminal style: dark pill around the command
   if (isTerminal) {
+    // Commands stay on a single truncated line by default. A long shell command
+    // otherwise wraps to many lines and pushes the actual conversation off
+    // screen — on a phone a single command could fill most of the viewport.
+    // Click the command to reveal it in full (along with its description).
     return (
       <div className="group my-1">
         <div className="flex items-start gap-2">
@@ -97,16 +104,22 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
             </svg>
           </div>
           <div className="flex min-w-0 flex-1 items-start gap-2">
-            <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
-              <code className={`font-mono text-xs text-green-400 ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
+            <button
+              type="button"
+              onClick={() => setIsExpanded((previous) => !previous)}
+              aria-expanded={isExpanded}
+              title={isExpanded ? 'Collapse command' : value}
+              className="min-w-0 flex-1 cursor-pointer rounded bg-gray-900 px-2.5 py-1 text-left dark:bg-black"
+            >
+              <code className={`font-mono text-xs text-green-400 ${isExpanded ? 'whitespace-pre-wrap break-all' : 'tool-command-line block truncate'}`}>
                 <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
               </code>
-            </div>
+            </button>
             {status && <ToolStatusBadge status={status} className="mt-0.5" />}
             {action === 'copy' && renderCopyButton()}
           </div>
         </div>
-        {secondary && (
+        {secondary && isExpanded && (
           <div className="ml-7 mt-1">
             <span className="text-[11px] italic text-muted-foreground/60">
               {secondary}

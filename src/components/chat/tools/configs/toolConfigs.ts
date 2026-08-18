@@ -54,7 +54,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       getSecondary: (input) => input.description,
       action: 'copy',
       style: 'terminal',
-      wrapText: true,
+      // Keep long commands on one truncated line; click to expand. Wrapping
+      // them by default let a single command eat most of a phone screen.
+      wrapText: false,
       colorScheme: {
         primary: 'text-green-400 font-mono',
         secondary: 'text-gray-400',
@@ -554,6 +556,25 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
  */
 export function getToolConfig(toolName: string): ToolDisplayConfig {
   return TOOL_CONFIGS[toolName] || TOOL_CONFIGS.Default;
+}
+
+/**
+ * Human-readable label for a tool that has no bespoke config.
+ *
+ * MCP tools arrive as `mcp__<server>__<tool>`, which renders as an unreadable
+ * run-on identifier in the transcript. Split it into server and tool so the
+ * line says which tool ran and where it came from.
+ */
+export function formatToolDisplayName(toolName: string): string {
+  if (!toolName) return 'Tool';
+
+  const mcpMatch = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(toolName);
+  if (mcpMatch) {
+    const [, server, tool] = mcpMatch;
+    return `${server} · ${tool}`;
+  }
+
+  return toolName;
 }
 
 /**

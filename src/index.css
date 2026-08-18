@@ -738,6 +738,18 @@
     overflow-wrap: break-word;
   }
 
+  /* A collapsed tool command must stay on exactly one truncated line. The rule
+     above exists to stop long URLs from causing horizontal scroll, but its
+     !important also defeats Tailwind's `truncate`, which is why a long shell
+     command still wrapped to a dozen lines. This selector is more specific
+     than `.chat-message code`, so it wins even though both are !important.
+     Expanded commands drop the class and fall back to the wrapping above. */
+  .chat-message code.tool-command-line {
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+
   /* Prevent horizontal scroll in chat area */
   .chat-message * {
     max-width: 100%;

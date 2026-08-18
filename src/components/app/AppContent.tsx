@@ -26,6 +26,7 @@ function AppContentInner() {
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
   const wasConnectedRef = useRef(false);
+  const didAutoOpenSidebarRef = useRef(false);
 
   const {
     activeSessions,
@@ -116,6 +117,25 @@ function AppContentInner() {
       });
     }
   }, [isConnected, selectedSession?.id, sendMessage]);
+
+  // On phones the project list lives in a drawer that starts closed, so landing
+  // on the app with nothing selected showed an empty "choose a project" panel
+  // and required a trip to the hamburger menu before anything could be done.
+  // Opening the drawer for that case makes the list itself the landing screen.
+  //
+  // Desktop is deliberately excluded: the sidebar is already docked and always
+  // visible there, so there is nothing to reveal.
+  //
+  // The ref makes this fire at most once per app load. Without it, dismissing
+  // the drawer while still on the empty state would immediately re-open it and
+  // leave the drawer impossible to close.
+  useEffect(() => {
+    if (didAutoOpenSidebarRef.current) return;
+    if (!isMobile || isLoadingProjects || selectedProject) return;
+
+    didAutoOpenSidebarRef.current = true;
+    setSidebarOpen(true);
+  }, [isMobile, isLoadingProjects, selectedProject, setSidebarOpen]);
 
   // Adjust the app container to stay above the virtual keyboard on iOS Safari.
   // On Chrome for Android the layout viewport already shrinks when the keyboard opens,

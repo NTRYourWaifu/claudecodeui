@@ -3,7 +3,7 @@ import React, { memo, useMemo, useCallback } from 'react';
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
 
-import { getToolConfig } from './configs/toolConfigs';
+import { formatToolDisplayName, getToolConfig } from './configs/toolConfigs';
 import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
@@ -278,7 +278,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
     return (
       <CollapsibleDisplay
-        toolName={toolName}
+        // The header reads "<tool> / <title>". MCP tools arrive as raw
+        // `mcp__server__tool` identifiers, which are unreadable at a glance, so
+        // the name is humanised here rather than in the heading beside it.
+        toolName={formatToolDisplayName(toolName)}
         toolId={toolId}
         title={title}
         defaultOpen={defaultOpen}
