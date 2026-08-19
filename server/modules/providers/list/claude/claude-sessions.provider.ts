@@ -606,24 +606,22 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
-    const totalNormalized = normalized.length;
-    let total = 0;
-    for (const msg of normalized) {
-      if (msg.kind !== 'tool_result') {
-        total += 1;
-      }
-    }
+    // Standalone tool_result entries are dropped by the client, which reads
+    // each result off the tool_use it was just attached to above. Leaving them
+    // in made the window and the reported total count different things: a
+    // session of 39 visible messages paginated as 69, so the client was told
+    // it had everything while hasMore still said otherwise. Pages then landed
+    // half empty and the loaded count could go backwards.
+    const visible = normalized.filter((msg) => msg.kind !== 'tool_result');
+    const total = visible.length;
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const windowStart = Math.max(0, total - normalizedOffset - (normalizedLimit ?? total));
+    const windowEnd = Math.max(0, total - normalizedOffset);
     const messages = normalizedLimit === null
-      ? normalized
-      : normalized.slice(
-          Math.max(0, totalNormalized - normalizedOffset - normalizedLimit),
-          Math.max(0, totalNormalized - normalizedOffset),
-        );
-    const hasMore = normalizedLimit === null
-      ? false
-      : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
+      ? visible
+      : visible.slice(windowStart, windowEnd);
+    const hasMore = normalizedLimit === null ? false : windowStart > 0;
 
     return {
       messages,

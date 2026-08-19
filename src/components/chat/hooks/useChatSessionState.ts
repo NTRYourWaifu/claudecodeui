@@ -404,13 +404,31 @@ export function useChatSessionState({
       const scrolledNearTop = container.scrollTop < 100;
       if (!scrolledNearTop) { topLoadLockRef.current = false; return; }
       if (topLoadLockRef.current) {
+        // Holding the anchor still often leaves the view at the very top, so a
+        // release that waits to be scrolled back down never fires and no further
+        // page can ever load. The restore effect clears it instead, once the
+        // prepended page has settled; this only covers a load that never got
+        // that far. Concurrent fetches are already held off by isLoadingMoreRef.
         if (container.scrollTop > 20) topLoadLockRef.current = false;
         return;
       }
       const didLoad = await loadOlderMessages(container);
       if (didLoad) topLoadLockRef.current = true;
     }
-  }, [isNearBottom, loadOlderMessages]);
+
+    // Once the whole session is in the store the view is still windowed by
+    // visibleMessageCount, and nothing was widening it on scroll — reaching the
+    // top simply stopped, with the only way further back being a button. Widen
+    // it here, holding the same anchor a fetched page would, so the two regimes
+    // behave identically to whoever is scrolling.
+    if (allMessagesLoadedRef.current || !hasMoreMessages) {
+      if (container.scrollTop >= 100) return;
+      if (chatMessages.length <= visibleMessageCount) return;
+      if (pendingScrollRestoreRef.current) return;
+      pendingScrollRestoreRef.current = captureScrollAnchor(container);
+      setVisibleMessageCount((prev) => prev + MESSAGES_PER_PAGE);
+    }
+  }, [chatMessages.length, hasMoreMessages, isNearBottom, loadOlderMessages, visibleMessageCount]);
 
   useLayoutEffect(() => {
     const restore = pendingScrollRestoreRef.current;
@@ -448,11 +466,17 @@ export function useChatSessionState({
     const settle = () => {
       holdAnchorStill();
       if (++frame < 6) rafId = window.requestAnimationFrame(settle);
+      // The page is in place and measured; another one may now be requested.
+      else topLoadLockRef.current = false;
     };
     rafId = window.requestAnimationFrame(settle);
 
     return () => window.cancelAnimationFrame(rafId);
-  }, [chatMessages.length]);
+  // visibleMessageCount matters as much as the message count: when the whole
+  // session is already in the store, widening the window prepends rendered
+  // messages without any new ones arriving. Watching only the length left the
+  // pending anchor uncollected, which then blocked every later widening.
+  }, [chatMessages.length, visibleMessageCount]);
 
   // Reset scroll/pagination state on session change
   useEffect(() => {
