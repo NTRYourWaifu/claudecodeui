@@ -29,12 +29,50 @@ export function formatToolInputForDisplay(input: unknown) {
   }
 }
 
+/**
+ * Every message this app can produce when it refuses a tool.
+ *
+ * Taken verbatim from the `canUseTool` callback in server/claude-sdk.js, which
+ * is the only place a refusal originates on our side. Matching exact strings
+ * rather than sniffing for permission-sounding words is deliberate: a command
+ * that fails on its own (a missing file, a syntax error) must not be dressed up
+ * as a permission problem, because granting the tool then changes nothing and
+ * the offered rule is pure noise in the allow list.
+ */
+const OWN_DENIAL_MESSAGES = [
+  'Tool disallowed by settings',
+  'User denied tool use',
+  'Permission request timed out',
+  'Permission request cancelled',
+];
+
+/**
+ * Refusals raised by the CLI itself, before our callback is consulted.
+ *
+ * Unlike the list above these were not read out of our own source, so the
+ * wording is a best guess and this pattern is kept deliberately narrow. It is
+ * safe in the direction that matters: a miss only costs a button that could
+ * have been offered, while a false match is the exact bug being fixed here.
+ */
+const CLI_DENIAL_PATTERN = /requested permissions|permission to use|haven.t granted|not allowed to use/i;
+
+function isPermissionDenial(toolResultContent: unknown): boolean {
+  // Matches how MessageComponent renders it, so the check sees the same text.
+  const text = String(toolResultContent || '');
+  if (!text) return false;
+  if (OWN_DENIAL_MESSAGES.some((message) => text.includes(message))) return true;
+  return CLI_DENIAL_PATTERN.test(text);
+}
+
 export function getClaudePermissionSuggestion(
   message: ChatMessage | null | undefined,
   provider: string,
 ): ClaudePermissionSuggestion | null {
   if (provider !== 'claude') return null;
   if (!message?.toolResult?.isError) return null;
+  // An error alone used to be enough, which meant every failed command offered
+  // to grant a permission it never lacked.
+  if (!isPermissionDenial(message.toolResult.content)) return null;
 
   const toolName = message?.toolName;
   const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);

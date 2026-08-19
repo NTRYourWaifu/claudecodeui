@@ -3,17 +3,39 @@ import type { TFunction } from 'i18next';
 import type { Project } from '../../../types/app';
 import type { ProjectSortOrder, SettingsProject, SessionViewModel, SessionWithProvider } from '../types/types';
 
+/**
+ * Marks that the default sort order has been switched from name to date.
+ *
+ * Settings writes `projectSortOrder` back on every save, so anyone who had
+ * ever opened the settings screen already carries an explicit 'name' that a
+ * changed default would never reach. This clears that once, so the new
+ * default applies, while a choice made after the switch is left alone.
+ */
+const SORT_DEFAULT_MIGRATION_KEY = 'cloudcli-project-sort-default-date';
+
+const migrateLegacySortDefault = (settings: { projectSortOrder?: ProjectSortOrder }): void => {
+  if (localStorage.getItem(SORT_DEFAULT_MIGRATION_KEY)) return;
+  localStorage.setItem(SORT_DEFAULT_MIGRATION_KEY, '1');
+
+  if (settings.projectSortOrder !== 'name') return;
+  delete settings.projectSortOrder;
+  localStorage.setItem('claude-settings', JSON.stringify(settings));
+};
+
 export const readProjectSortOrder = (): ProjectSortOrder => {
   try {
     const rawSettings = localStorage.getItem('claude-settings');
     if (!rawSettings) {
-      return 'name';
+      return 'date';
     }
 
     const settings = JSON.parse(rawSettings) as { projectSortOrder?: ProjectSortOrder };
-    return settings.projectSortOrder === 'date' ? 'date' : 'name';
+    migrateLegacySortDefault(settings);
+    // Recently-touched projects are what someone comes back to, so date leads
+    // unless it was deliberately set to alphabetical.
+    return settings.projectSortOrder === 'name' ? 'name' : 'date';
   } catch {
-    return 'name';
+    return 'date';
   }
 };
 
@@ -218,4 +240,60 @@ export const normalizeProjectForSettings = (project: Project): SettingsProject =
         ? project.path
         : fallbackPath,
   };
+};
+
+/**
+ * Compact relative age for sidebar rows: <1m, Xm, Xhr, Xd.
+ */
+export const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const diffInMinutes = Math.floor(Math.max(0, currentTime.getTime() - date.getTime()) / (1000 * 60));
+  if (diffInMinutes < 1) {
+    return '<1m';
+  }
+
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes}m`;
+  }
+
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours}hr`;
+  }
+
+  return `${Math.floor(diffInHours / 24)}d`;
+};
+
+/**
+ * Flattens the already-loaded sessions of every project into one recency-sorted
+ * list so the sidebar's Conversations tab can show recent work across projects.
+ * Only sessions the projects list already carries are considered; per-project
+ * pagination is not fetched here.
+ */
+export const collectRecentSessions = (
+  projects: Project[],
+  searchFilter: string,
+  limit: number,
+): { project: Project; session: SessionWithProvider }[] => {
+  const normalizedSearch = searchFilter.trim().toLowerCase();
+
+  const entries = projects.flatMap((project) =>
+    getAllSessions(project).map((session) => ({ project, session })),
+  );
+
+  const matched = normalizedSearch
+    ? entries.filter(({ project, session }) => {
+        const title = String(session.summary || session.name || '').toLowerCase();
+        const projectName = (project.displayName || project.projectId).toLowerCase();
+        return title.includes(normalizedSearch) || projectName.includes(normalizedSearch);
+      })
+    : entries;
+
+  return matched
+    .sort((a, b) => getSessionDate(b.session).getTime() - getSessionDate(a.session).getTime())
+    .slice(0, limit);
 };
