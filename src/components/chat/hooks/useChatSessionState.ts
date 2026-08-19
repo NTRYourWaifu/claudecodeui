@@ -789,6 +789,48 @@ export function useChatSessionState({
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
   }, [autoScrollToBottom, chatMessages.length, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
+  // Following a reply as it streams.
+  //
+  // The effect above keys on the message count, but a streaming reply is one
+  // message rewritten in place — the count never moves, so it fired once when
+  // the reply began and never again. The answer then grew off the bottom of the
+  // screen while the view stayed where it was.
+  //
+  // Watching the subtree catches the growth itself, which is the thing that
+  // actually needs following. Whether to follow is read from userScrolledUpRef
+  // rather than measured here on purpose: growth alone pushes the view away
+  // from the bottom, so a live measurement would report "scrolled up" on the
+  // first chunk and stop following for the rest of the reply. The ref records
+  // intent instead, and is updated by real scroll events, so scrolling up stops
+  // the follow and scrolling back down resumes it.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !autoScrollToBottom) return undefined;
+    if (typeof MutationObserver === 'undefined') return undefined;
+
+    let rafId = 0;
+    const follow = () => {
+      rafId = 0;
+      if (userScrolledUpRef.current) return;
+      // Never fight the pagination restore, which is holding an older message
+      // still while earlier ones are prepended above it.
+      if (isLoadingMoreRef.current || pendingScrollRestoreRef.current) return;
+      if (searchScrollActiveRef.current) return;
+      scrollToBottom();
+    };
+
+    const observer = new MutationObserver(() => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(follow);
+    });
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+
+    return () => {
+      observer.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [autoScrollToBottom, scrollToBottom]);
+
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
