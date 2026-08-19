@@ -1,3 +1,4 @@
+import { parseAnswersFromToolResult } from '../utils/askUserQuestionAnswers';
 import React, { memo, useMemo, useCallback } from 'react';
 
 import type { Project } from '../../../types/app';
@@ -98,6 +99,18 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [mode, toolInput, toolResult]);
 
+  // A transcript from elsewhere carries the answers in the result rather than
+  // the input. Folding them in here means the collapsed title and the answer
+  // chips both come out right, with no second path to keep in step.
+  const dataWithAnswers = useMemo(() => {
+    if (toolName !== 'AskUserQuestion' || mode !== 'input') return parsedData;
+    if (!parsedData || typeof parsedData !== 'object') return parsedData;
+    if (parsedData.answers && Object.keys(parsedData.answers).length > 0) return parsedData;
+    const recovered = parseAnswersFromToolResult(toolResult?.content);
+    if (Object.keys(recovered).length === 0) return parsedData;
+    return { ...parsedData, answers: recovered };
+  }, [toolName, mode, parsedData, toolResult]);
+
   // Only derive and show status badge on input renders
   const toolStatus = useMemo(
     () => mode === 'input' ? deriveToolStatus(toolResult) : undefined,
@@ -106,10 +119,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   const handleAction = useCallback(() => {
     if (displayConfig?.action === 'open-file' && onFileOpen) {
-      const value = displayConfig.getValue?.(parsedData) || '';
+      const value = displayConfig.getValue?.(dataWithAnswers) || '';
       onFileOpen(value);
     }
-  }, [displayConfig, parsedData, onFileOpen]);
+  }, [displayConfig, dataWithAnswers, onFileOpen]);
 
   // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
   if (isSubagentContainer && subagentState) {
@@ -126,8 +139,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   if (!displayConfig) return null;
 
   if (displayConfig.type === 'one-line') {
-    const value = displayConfig.getValue?.(parsedData) || '';
-    const secondary = displayConfig.getSecondary?.(parsedData);
+    const value = displayConfig.getValue?.(dataWithAnswers) || '';
+    const secondary = displayConfig.getSecondary?.(dataWithAnswers);
 
     return (
       <OneLineDisplay
@@ -151,10 +164,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (displayConfig.type === 'plan') {
     const title = typeof displayConfig.title === 'function'
-      ? displayConfig.title(parsedData)
+      ? displayConfig.title(dataWithAnswers)
       : displayConfig.title || 'Plan';
 
-    const contentProps = displayConfig.getContentProps?.(parsedData, {
+    const contentProps = displayConfig.getContentProps?.(dataWithAnswers, {
       selectedProject,
       createDiff,
       onFileOpen
@@ -178,14 +191,14 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (displayConfig.type === 'collapsible') {
     const title = typeof displayConfig.title === 'function'
-      ? displayConfig.title(parsedData)
+      ? displayConfig.title(dataWithAnswers)
       : displayConfig.title || 'Details';
 
     const defaultOpen = displayConfig.defaultOpen !== undefined
       ? displayConfig.defaultOpen
       : autoExpandTools;
 
-    const contentProps = displayConfig.getContentProps?.(parsedData, {
+    const contentProps = displayConfig.getContentProps?.(dataWithAnswers, {
       selectedProject,
       createDiff,
       onFileOpen
@@ -254,7 +267,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         break;
 
       case 'success-message': {
-        const msg = displayConfig.getMessage?.(parsedData) || 'Success';
+        const msg = displayConfig.getMessage?.(dataWithAnswers) || 'Success';
         contentComponent = (
           <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

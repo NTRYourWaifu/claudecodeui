@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { ChatMessage } from '../../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
@@ -7,6 +7,7 @@ import { getIntrinsicMessageKey } from '../../utils/messageKeys';
 import MessageComponent from './MessageComponent';
 import ProviderSelectionEmptyState from './ProviderSelectionEmptyState';
 import ConversationScrollMarks from './ConversationScrollMarks';
+import ToolCallGroup from './ToolCallGroup';
 
 interface ChatMessagesPaneProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -101,6 +102,24 @@ export default function ChatMessagesPane({
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const allocatedKeysRef = useRef<Set<string>>(new Set());
   const generatedMessageKeyCounterRef = useRef(0);
+
+  // Consecutive tool calls, gathered so a run of them can be shown as one row.
+  //
+  // Grouping is purely presentational and deliberately stops here rather than
+  // reshaping the message list: the scroll anchoring and pagination both count
+  // on the messages staying as they are.
+  const toolRuns = useMemo(() => {
+    const runs: { grouped: boolean; messages: ChatMessage[] }[] = [];
+    for (const message of visibleMessages) {
+      // A failure has to stay visible, so it neither joins a run nor starts one.
+      const groupable = Boolean(message.isToolUse) && !message.toolResult?.isError;
+      const last = runs[runs.length - 1];
+      if (last && last.grouped === groupable) last.messages.push(message);
+      else runs.push({ grouped: groupable, messages: [message] });
+    }
+    // One call on its own gains nothing from a wrapper around it.
+    return runs.map((run) => (run.grouped && run.messages.length < 2 ? { ...run, grouped: false } : run));
+  }, [visibleMessages]);
 
   // Keep keys stable across prepends so existing MessageComponent instances retain local state.
   const getMessageKey = useCallback((message: ChatMessage) => {
@@ -235,23 +254,37 @@ export default function ChatMessagesPane({
             </div>
           )}
 
-          {visibleMessages.map((message, index) => {
-            const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+          {toolRuns.map((run) => {
+            const rendered = run.messages.map((message) => {
+              const index = visibleMessages.indexOf(message);
+              const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
+              return (
+                <MessageComponent
+                  key={getMessageKey(message)}
+                  message={message}
+                  prevMessage={prevMessage}
+                  createDiff={createDiff}
+                  onFileOpen={onFileOpen}
+                  onShowSettings={onShowSettings}
+                  onGrantToolPermission={onGrantToolPermission}
+                  autoExpandTools={autoExpandTools}
+                  showRawParameters={showRawParameters}
+                  showThinking={showThinking}
+                  selectedProject={selectedProject}
+                  provider={provider}
+                />
+              );
+            });
+
+            if (!run.grouped) return rendered;
             return (
-              <MessageComponent
-                key={getMessageKey(message)}
-                message={message}
-                prevMessage={prevMessage}
-                createDiff={createDiff}
-                onFileOpen={onFileOpen}
-                onShowSettings={onShowSettings}
-                onGrantToolPermission={onGrantToolPermission}
-                autoExpandTools={autoExpandTools}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                selectedProject={selectedProject}
-                provider={provider}
-              />
+              <ToolCallGroup
+                key={`tool-run-${getMessageKey(run.messages[0])}`}
+                messages={run.messages}
+                defaultOpen={Boolean(autoExpandTools)}
+              >
+                {rendered}
+              </ToolCallGroup>
             );
           })}
         </>

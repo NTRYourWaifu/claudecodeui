@@ -291,5 +291,11 @@
   },
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
+  },
+  "toolGroup": {
+    "summary_one": "{{count}} 次工具调用",
+    "summary_other": "{{count}} 次工具调用",
+    "collapse_one": "收起 {{count}} 次工具调用",
+    "collapse_other": "收起 {{count}} 次工具调用"
   }
 }
