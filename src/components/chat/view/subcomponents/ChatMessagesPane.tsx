@@ -111,8 +111,11 @@ export default function ChatMessagesPane({
   const toolRuns = useMemo(() => {
     const runs: { grouped: boolean; messages: ChatMessage[] }[] = [];
     for (const message of visibleMessages) {
-      // A failure has to stay visible, so it neither joins a run nor starts one.
-      const groupable = Boolean(message.isToolUse) && !message.toolResult?.isError;
+      // Errors group too. Keeping them out fragmented a run into pieces around
+      // every failure, which cost more room than it saved; the summary row
+      // carries the failure instead, so it is still on screen without the call
+      // that produced it being separated from the ones around it.
+      const groupable = Boolean(message.isToolUse);
       const last = runs[runs.length - 1];
       if (last && last.grouped === groupable) last.messages.push(message);
       else runs.push({ grouped: groupable, messages: [message] });

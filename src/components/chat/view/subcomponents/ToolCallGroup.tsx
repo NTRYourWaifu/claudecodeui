@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Wrench } from 'lucide-react';
+import { ChevronRight, TriangleAlert, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ChatMessage } from '../../types/types';
 
@@ -22,6 +22,18 @@ function summarise(messages: ChatMessage[]): string {
     .join('、');
 }
 
+/** The first line of the first failure, which is the part worth reading. */
+function firstFailure(messages: ChatMessage[]): string {
+  const failed = messages.find((message) => message.toolResult?.isError);
+  if (!failed) return '';
+  return String(failed.toolResult?.content || '')
+    .split('\n')
+    .map((line) => line.trim())
+    // Skip the markdown scaffolding the error is wrapped in — a row reading
+    // "### Error" says nothing the red already said.
+    .find((line) => line.length > 0 && !/^[#>*`_-]+\s*$/.test(line) && !/^#{1,6}\s/.test(line) && !line.startsWith('```')) || '';
+}
+
 /**
  * A run of consecutive tool calls, shown as one line until asked for.
  *
@@ -29,12 +41,16 @@ function summarise(messages: ChatMessage[]): string {
  * took a full row — on a phone the reply itself scrolled off before it could be
  * read. The calls are still every bit as available, one tap away.
  *
- * Errors are deliberately not folded in: whatever went wrong has to stay on
- * screen, so a run containing one is left expanded.
+ * Failures are folded in like the rest, but never silently: the row turns red,
+ * counts them, and quotes the first one. Holding them out of the group instead
+ * split a run into fragments around each failure, which took more room than
+ * grouping had saved.
  */
 export default function ToolCallGroup({ messages, defaultOpen, children }: ToolCallGroupProps) {
   const { t } = useTranslation('chat');
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const failureCount = messages.filter((message) => message.toolResult?.isError).length;
+  // A run that failed opens on its own: the detail is the reason you are looking.
+  const [isOpen, setIsOpen] = useState(defaultOpen || failureCount > 0);
 
   if (isOpen) {
     return (
@@ -52,16 +68,31 @@ export default function ToolCallGroup({ messages, defaultOpen, children }: ToolC
     );
   }
 
+  const failure = firstFailure(messages);
+
   return (
     <button
       type="button"
       onClick={() => setIsOpen(true)}
-      className="mx-3 flex w-[calc(100%-1.5rem)] items-center gap-2 rounded border border-border/40 bg-muted/30 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground sm:mx-0 sm:w-full"
+      className={`mx-3 flex w-[calc(100%-1.5rem)] items-center gap-2 rounded border px-2.5 py-1.5 text-left text-xs transition-colors sm:mx-0 sm:w-full ${
+        failureCount > 0
+          ? 'border-red-300/50 bg-red-50/40 text-red-700 hover:bg-red-50/70 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300 dark:hover:bg-red-950/30'
+          : 'border-border/40 bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+      }`}
     >
-      <Wrench className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+      {failureCount > 0 ? (
+        <TriangleAlert className="h-3.5 w-3.5 flex-shrink-0" />
+      ) : (
+        <Wrench className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+      )}
       <span className="min-w-0 flex-1 truncate">
         {t('toolGroup.summary', { count: messages.length })}
-        <span className="ml-1.5 opacity-70">{summarise(messages)}</span>
+        {failureCount > 0 && (
+          <span className="ml-1.5 font-medium">
+            {t('toolGroup.failed', { count: failureCount })}
+          </span>
+        )}
+        <span className="ml-1.5 opacity-70">{failure || summarise(messages)}</span>
       </span>
       <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
     </button>

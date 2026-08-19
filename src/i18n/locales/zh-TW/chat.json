@@ -325,6 +325,8 @@
     "summary_one": "{{count}} 次工具調用",
     "summary_other": "{{count}} 次工具調用",
     "collapse_one": "收起 {{count}} 次工具調用",
-    "collapse_other": "收起 {{count}} 次工具調用"
+    "collapse_other": "收起 {{count}} 次工具調用",
+    "failed_one": "{{count}} 個失敗",
+    "failed_other": "{{count}} 個失敗"
   }
 }
