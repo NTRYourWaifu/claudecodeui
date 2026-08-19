@@ -11,6 +11,34 @@ import { normalizedToChatMessages } from './useChatMessages';
 
 const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
+/**
+ * A working session runs long stretches of tool calls between questions, so a
+ * window counted in raw messages can open on a single question — the
+ * conversation rail needs two before it has anything to show, and there is
+ * nothing to jump between anyway. Widen the opening window until it holds a
+ * few real turns.
+ */
+const INITIAL_VISIBLE_QUESTIONS = 4;
+const MAX_INITIAL_VISIBLE_MESSAGES = 600;
+
+function countQuestionsIn(messages: ChatMessage[], windowSize: number): number {
+  let questions = 0;
+  for (let i = Math.max(0, messages.length - windowSize); i < messages.length; i += 1) {
+    if (messages[i].type === 'user') questions += 1;
+  }
+  return questions;
+}
+
+function windowCoveringQuestions(messages: ChatMessage[]): number {
+  let questions = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].type === 'user') questions += 1;
+    if (questions >= INITIAL_VISIBLE_QUESTIONS) {
+      return Math.min(MAX_INITIAL_VISIBLE_MESSAGES, Math.max(INITIAL_VISIBLE_MESSAGES, messages.length - i));
+    }
+  }
+  return Math.min(MAX_INITIAL_VISIBLE_MESSAGES, Math.max(INITIAL_VISIBLE_MESSAGES, messages.length));
+}
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -176,6 +204,16 @@ export function useChatSessionState({
   // "at the bottom" after the user had already scrolled away — and yank them
   // back down. The ref is current the moment the scroll event fires.
   const userScrolledUpRef = useRef(false);
+  /**
+   * Marks the next scroll event as one this code caused, not the reader.
+   *
+   * scrollToBottom fires a scroll event of its own, and during a streaming
+   * reply the content is still growing when it lands — so the gap measured at
+   * that moment can be large enough to read as "scrolled away". A time window
+   * was not enough — the event can arrive after the window has closed — so the
+   * next event is claimed explicitly instead.
+   */
+  const programmaticScrollPendingRef = useRef(false);
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
@@ -340,6 +378,7 @@ export function useChatSessionState({
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
+    programmaticScrollPendingRef.current = true;
     container.scrollTop = container.scrollHeight;
   }, []);
 
@@ -397,8 +436,14 @@ export function useChatSessionState({
     if (!container) return;
 
     const nearBottom = isNearBottom();
-    userScrolledUpRef.current = !nearBottom;
-    setIsUserScrolledUp(!nearBottom);
+    // Our own scroll, mid-growth: the gap it lands on says nothing about intent,
+    // so claim the event and leave the follow decision as the reader left it.
+    const wasOurs = programmaticScrollPendingRef.current;
+    programmaticScrollPendingRef.current = false;
+    if (!wasOurs || nearBottom) {
+      userScrolledUpRef.current = !nearBottom;
+      setIsUserScrolledUp(!nearBottom);
+    }
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
@@ -754,6 +799,28 @@ export function useChatSessionState({
     fetchInitialTokenUsage();
   }, [selectedProject, selectedSession?.id, selectedSession?.__provider]);
 
+  // Runs once per session load, before anything is scrolled: widening later
+  // would move the view under whoever is already reading it.
+  const initialWindowSizedRef = useRef(false);
+  useEffect(() => {
+    initialWindowSizedRef.current = false;
+  }, [currentSessionId]);
+  useEffect(() => {
+    if (initialWindowSizedRef.current) return;
+    if (isLoadingSessionMessages || chatMessages.length === 0) return;
+    // Messages arrive in batches, and the first one is usually all tool calls.
+    // Latching on it would settle the window before a single question is in
+    // it, which is the state this exists to avoid — so wait until the window
+    // covers some questions, or until there is nothing further to load.
+    const wanted = windowCoveringQuestions(chatMessages);
+    const covered = countQuestionsIn(chatMessages, wanted);
+    if (covered < INITIAL_VISIBLE_QUESTIONS && hasMoreMessages && wanted < MAX_INITIAL_VISIBLE_MESSAGES) return;
+    // Never widen under someone already reading; they would lose their place.
+    if (userScrolledUpRef.current) { initialWindowSizedRef.current = true; return; }
+    initialWindowSizedRef.current = true;
+    setVisibleMessageCount((prev) => (wanted > prev ? wanted : prev));
+  }, [chatMessages, currentSessionId, hasMoreMessages, isLoadingSessionMessages]);
+
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
     return chatMessages.slice(-visibleMessageCount);
@@ -808,18 +875,27 @@ export function useChatSessionState({
     if (!container || !autoScrollToBottom) return undefined;
     if (typeof MutationObserver === 'undefined') return undefined;
 
+    // Chunks arrive faster than one observer callback per frame can absorb, and
+    // markdown keeps growing for a while after the text lands. Rather than react
+    // to each mutation, each one extends a short window during which the view is
+    // held at the bottom every frame.
     let rafId = 0;
+    let holdUntil = 0;
     const follow = () => {
       rafId = 0;
+      if (Date.now() > holdUntil) return;
+      rafId = window.requestAnimationFrame(follow);
       if (userScrolledUpRef.current) return;
       // Never fight the pagination restore, which is holding an older message
       // still while earlier ones are prepended above it.
       if (isLoadingMoreRef.current || pendingScrollRestoreRef.current) return;
       if (searchScrollActiveRef.current) return;
+      if (container.scrollHeight - container.scrollTop - container.clientHeight < 1) return;
       scrollToBottom();
     };
 
     const observer = new MutationObserver(() => {
+      holdUntil = Date.now() + 400;
       if (rafId) return;
       rafId = window.requestAnimationFrame(follow);
     });

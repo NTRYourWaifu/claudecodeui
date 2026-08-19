@@ -127,11 +127,15 @@ export default function ChatMessagesPane({
   }, []);
 
   return (
+    // The rail is a sibling of the scroller, not a child of it. Inside, its
+    // absolute positioning resolved against the full scrollable height, so it
+    // scrolled away with the conversation and was almost never on screen.
+    <div className="relative flex min-h-0 flex-1 flex-col">
     <div
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="relative flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-0 py-2 sm:space-y-2 sm:px-3 sm:py-2.5"
+      className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-0 py-2 sm:space-y-2 sm:px-3 sm:py-2.5"
     >
       {isLoadingSessionMessages && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
@@ -250,13 +254,14 @@ export default function ChatMessagesPane({
               />
             );
           })}
-
-          <ConversationScrollMarks
-            scrollContainerRef={scrollContainerRef}
-            messageSignature={`${visibleMessages.length}:${chatMessages.length}`}
-          />
         </>
       )}
+    </div>
+
+      <ConversationScrollMarks
+        scrollContainerRef={scrollContainerRef}
+        messageSignature={`${visibleMessages.length}:${chatMessages.length}`}
+      />
     </div>
   );
 }

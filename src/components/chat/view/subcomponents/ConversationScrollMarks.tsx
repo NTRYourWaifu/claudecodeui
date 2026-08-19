@@ -17,16 +17,18 @@ type ConversationScrollMarksProps = {
   messageSignature: string | number;
 };
 
-const MARK_HEIGHT = 14;
-const MARK_GAP = 3;
+const MARK_INK_HEIGHT = 24;
+/** Padded well past the ink so a thumb can land on it. */
+const MARK_HIT_HEIGHT = 44;
+const MARK_GAP = 6;
 
 /**
  * A rail of tick marks down the right edge, one per question asked, for
  * jumping back to an earlier turn.
  *
  * Deliberately overlaid rather than laid out in the flow: it must not narrow
- * the text column. It stays faint until hovered so it does not compete with
- * the conversation.
+ * the text column. It sits at half strength so it does not compete with the
+ * conversation, and comes up to full while scrolling or on hover.
  *
  * Marks are bars rather than dots because dots are hard to hit on a phone.
  */
@@ -37,6 +39,10 @@ export default function ConversationScrollMarks({
   const [marks, setMarks] = useState<Mark[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [hovered, setHovered] = useState(false);
+  // Revealed by scrolling as well as hovering: a phone has no pointer to hover
+  // with, so hover alone left the rail permanently at its dimmest.
+  const [active, setActive] = useState(false);
+  const fadeTimerRef = useRef(0);
   const railRef = useRef<HTMLDivElement>(null);
 
   const measure = useCallback(() => {
@@ -91,6 +97,9 @@ export default function ConversationScrollMarks({
     if (!container) return undefined;
 
     const onScroll = () => {
+      setActive(true);
+      window.clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = window.setTimeout(() => setActive(false), 1500);
       const scrollTop = container.scrollTop;
       let current = -1;
       for (let i = 0; i < marks.length; i += 1) {
@@ -123,6 +132,7 @@ export default function ConversationScrollMarks({
 
     return () => {
       container.removeEventListener('scroll', onScroll);
+      window.clearTimeout(fadeTimerRef.current);
       window.clearTimeout(debounce);
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
@@ -134,14 +144,14 @@ export default function ConversationScrollMarks({
   const railHeight = railRef.current?.clientHeight ?? 0;
   // When there are more questions than the rail can show without overlapping,
   // thin them out evenly rather than letting them merge into a solid line.
-  const capacity = railHeight > 0 ? Math.floor(railHeight / (MARK_HEIGHT + MARK_GAP)) : marks.length;
+  const capacity = railHeight > 0 ? Math.floor(railHeight / (MARK_INK_HEIGHT + MARK_GAP)) : marks.length;
   const step = capacity > 0 && marks.length > capacity ? Math.ceil(marks.length / capacity) : 1;
   const visibleMarks = step > 1 ? marks.filter((_, index) => index % step === 0) : marks;
 
   return (
     <div
       ref={railRef}
-      className="pointer-events-none absolute bottom-2 right-0.5 top-2 z-10 flex w-4 flex-col items-center justify-start"
+      className="pointer-events-none absolute bottom-2 right-0 top-2 z-10 flex w-6 flex-col items-center justify-start"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       aria-hidden={false}
@@ -165,16 +175,17 @@ export default function ConversationScrollMarks({
             onBlur={() => setHovered(false)}
             style={{
               position: 'absolute',
-              top: `calc(${mark.ratio * 100}% - ${MARK_HEIGHT / 2}px)`,
-              height: MARK_HEIGHT,
+              top: `calc(${mark.ratio * 100}% - ${MARK_HIT_HEIGHT / 2}px)`,
+              height: MARK_HIT_HEIGHT,
             }}
-            className={`pointer-events-auto flex w-4 items-center justify-center transition-opacity duration-150 ${
-              hovered || isActive ? 'opacity-100' : 'opacity-30'
+            className={`pointer-events-auto flex w-6 items-center justify-center transition-opacity duration-200 ${
+              hovered || active || isActive ? 'opacity-100' : 'opacity-50'
             }`}
           >
             <span
-              className={`block rounded-full transition-all duration-150 ${
-                isActive ? 'h-3 w-[3px] bg-primary' : 'h-2.5 w-[2px] bg-muted-foreground hover:bg-primary'
+              style={{ height: MARK_INK_HEIGHT }}
+              className={`block w-1 rounded-full transition-colors duration-200 ${
+                isActive ? 'bg-primary' : 'bg-muted-foreground hover:bg-primary'
               }`}
             />
           </button>
