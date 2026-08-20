@@ -1,24 +1,37 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type RefObject } from 'react';
 
-type UpwardPopover = {
-  triggerRef: RefObject<HTMLButtonElement>;
+type AnchoredMenu = {
+  /** Mutable so a caller can point the menu at whichever button was clicked. */
+  triggerRef: MutableRefObject<HTMLButtonElement | null>;
   panelRef: RefObject<HTMLDivElement>;
   /** Inline style for the panel; null until the first measurement lands. */
   style: CSSProperties | null;
 };
 
+type AnchoredMenuOptions = {
+  maxWidth?: number;
+  /**
+   * `up` always opens above the trigger, which is what the composer needs: it
+   * sits at the bottom of the screen, so a downward menu would land off-screen
+   * or under the on-screen keyboard. `auto` opens downward and only flips up
+   * when the space below is too tight.
+   */
+  placement?: 'up' | 'auto';
+};
+
 /**
- * Positions a popover above its trigger, clamped to the viewport.
+ * Positions a menu next to its trigger, clamped to the viewport.
  *
- * The composer sits at the bottom of the screen, so its menus must open
- * upward — opening downward would put them off-screen or under the on-screen
- * keyboard. Closes on outside pointer-down and on Escape.
- *
- * Repositioning also watches the panel's own size: on first mount the panel
- * measures 0px tall, so a single measurement would place it wrongly.
+ * Closes on outside pointer-down and on Escape. Repositioning also watches the
+ * panel's own size: on first mount the panel measures 0px tall, so a single
+ * measurement would place it wrongly.
  */
-export function useUpwardPopover(open: boolean, onClose: () => void, maxWidth = 320): UpwardPopover {
-  const triggerRef = useRef<HTMLButtonElement>(null);
+export function useAnchoredMenu(
+  open: boolean,
+  onClose: () => void,
+  { maxWidth = 320, placement = 'up' }: AnchoredMenuOptions = {},
+): AnchoredMenu {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties | null>(null);
 
@@ -35,14 +48,24 @@ export function useUpwardPopover(open: boolean, onClose: () => void, maxWidth = 
     let left = rect.left + rect.width / 2 - width / 2;
     left = Math.max(pad, Math.min(left, window.innerWidth - width - pad));
 
-    const spaceAbove = rect.top - spacing - pad;
     const measured = panel.offsetHeight || 360;
+    const spaceAbove = rect.top - spacing - pad;
+    const spaceBelow = window.innerHeight - rect.bottom - spacing - pad;
+
+    const opensDownward = placement === 'auto' && (spaceBelow >= measured || spaceBelow >= spaceAbove);
+
+    if (opensDownward) {
+      const availableHeight = Math.max(180, spaceBelow);
+      setStyle({ position: 'fixed', top: rect.bottom + spacing, left, width, maxHeight: availableHeight, zIndex: 80 });
+      return;
+    }
+
     const availableHeight = Math.max(180, spaceAbove);
     const panelHeight = Math.min(measured, availableHeight);
     const top = Math.max(pad, rect.top - spacing - panelHeight);
 
     setStyle({ position: 'fixed', top, left, width, maxHeight: availableHeight, zIndex: 80 });
-  }, [maxWidth]);
+  }, [maxWidth, placement]);
 
   useEffect(() => {
     if (!open) {

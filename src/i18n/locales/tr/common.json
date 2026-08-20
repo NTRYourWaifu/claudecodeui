@@ -129,6 +129,16 @@
       "refresh": "Yenile",
       "menuLabel": "Dosya bağlam menüsü",
       "loading": "Yükleniyor..."
+    },
+    "quickAccess": "Hızlı erişim",
+    "drives": "Sürücüler",
+    "pickFolderFirst": "Önce bir klasör seçin",
+    "zipTooLarge": "Klasörde {{count}} taneden fazla dosya var; daha küçük parçalar hâlinde indirin",
+    "scope": {
+      "project": "Proje",
+      "computer": "Bu bilgisayar",
+      "switchToProject": "Proje klasörüne dön",
+      "switchToComputer": "Tüm bilgisayara göz at"
     }
   },
   "projectWizard": {

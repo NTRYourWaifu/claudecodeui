@@ -129,6 +129,16 @@
       "refresh": "刷新",
       "menuLabel": "文件上下文菜单",
       "loading": "加载中..."
+    },
+    "quickAccess": "快速访问",
+    "drives": "驱动器",
+    "pickFolderFirst": "请先选择文件夹",
+    "zipTooLarge": "文件夹超过 {{count}} 个文件，请分批下载",
+    "scope": {
+      "project": "项目",
+      "computer": "整台电脑",
+      "switchToProject": "切回项目文件夹",
+      "switchToComputer": "浏览整台电脑"
     }
   },
   "projectWizard": {

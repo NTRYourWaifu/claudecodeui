@@ -3,6 +3,7 @@
     "title": "프로젝트",
     "newProject": "새 프로젝트",
     "deleteProject": "프로젝트 제거",
+    "moreActions": "추가 작업",
     "renameProject": "프로젝트 이름 변경",
     "noProjects": "프로젝트가 없습니다",
     "loadingProjects": "프로젝트 로딩 중...",
@@ -32,13 +33,16 @@
     "loadingSessions": "세션 로딩 중...",
     "unnamed": "이름 없음",
     "loading": "로딩 중...",
-    "showMore": "더 많은 세션 보기"
+    "showMore": "더 많은 세션 보기",
+    "statusRunning": "작업 중",
+    "statusUnread": "완료됨, 아직 확인하지 않음"
   },
   "tooltips": {
     "viewEnvironments": "환경 보기",
     "hideSidebar": "사이드바 숨기기",
     "createProject": "새 프로젝트 생성",
     "refresh": "프로젝트 및 세션 새로고침 (Ctrl+R)",
+    "moreActions": "추가 작업",
     "renameProject": "프로젝트 이름 변경 (F2)",
     "deleteProject": "사이드바에서 프로젝트 제거 (Delete)",
     "addToFavorites": "즐겨찾기에 추가",

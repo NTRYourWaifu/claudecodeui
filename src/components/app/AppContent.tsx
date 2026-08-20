@@ -6,6 +6,7 @@ import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
 import CommandPalette from '../command-palette/CommandPalette';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { useSessionActivity } from '../../contexts/SessionActivityContext';
 import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
@@ -27,6 +28,7 @@ function AppContentInner() {
   const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
   const wasConnectedRef = useRef(false);
   const didAutoOpenSidebarRef = useRef(false);
+  const { setViewedSession } = useSessionActivity();
 
   const {
     activeSessions,
@@ -60,6 +62,12 @@ function AppContentInner() {
     isMobile,
     activeSessions,
   });
+
+  // The sidebar dot needs to know which session is being looked at so it can
+  // drop the unread mark for it.
+  useEffect(() => {
+    setViewedSession(selectedSession?.id ?? null);
+  }, [selectedSession?.id, setViewedSession]);
 
   usePaletteOpsRegister({
     openSettings,

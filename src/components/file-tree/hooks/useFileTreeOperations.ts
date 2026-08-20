@@ -1,13 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
 import { api } from '../../../utils/api';
-import type { FileTreeNode } from '../types/types';
+import type { FileTreeNode, FileTreeScope } from '../types/types';
 import type { Project } from '../../../types/app';
 
 // Invalid filename characters
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 const RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+
+// Ceiling on a folder-to-ZIP export. Machine scope can reach directories with tens of
+// thousands of files, and each one costs a round trip, so stop before the browser does.
+const MAX_ZIP_FILES = 500;
 
 export type ToastMessage = {
   message: string;
@@ -23,6 +27,7 @@ export type UseFileTreeOperationsOptions = {
   selectedProject: Project | null;
   onRefresh: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
+  scope?: FileTreeScope;
 };
 
 export type UseFileTreeOperationsResult = {
@@ -65,8 +70,36 @@ export function useFileTreeOperations({
   selectedProject,
   onRefresh,
   showToast,
+  scope = 'project',
 }: UseFileTreeOperationsOptions): UseFileTreeOperationsResult {
   const { t } = useTranslation();
+
+  // Both scopes expose the same four calls; only the addressing differs. Project scope
+  // sends a DB projectId and the server resolves paths under that root, while machine
+  // scope sends absolute paths to `/api/fs/*`.
+  const projectId = selectedProject?.projectId;
+  const fileApi = useMemo(() => {
+    if (scope === 'computer') {
+      return {
+        ready: true,
+        createFile: api.fs.createFile,
+        renameFile: api.fs.renameFile,
+        deleteFile: api.fs.deleteFile,
+        readFileBlob: api.fs.readFileBlob,
+      };
+    }
+
+    return {
+      ready: Boolean(projectId),
+      createFile: (payload: { path: string; type: 'file' | 'directory'; name: string }) =>
+        api.createFile(projectId, payload),
+      renameFile: (payload: { oldPath: string; newName: string }) =>
+        api.renameFile(projectId, payload),
+      deleteFile: (payload: { path: string; type: 'file' | 'directory' }) =>
+        api.deleteFile(projectId, payload),
+      readFileBlob: (filePath: string) => api.readFileBlob(projectId, filePath),
+    };
+  }, [scope, projectId]);
 
   // State
   const [renamingItem, setRenamingItem] = useState<FileTreeNode | null>(null);
@@ -111,7 +144,7 @@ export function useFileTreeOperations({
   }, []);
 
   const handleConfirmRename = useCallback(async () => {
-    if (!renamingItem || !selectedProject) return;
+    if (!renamingItem || !fileApi.ready) return;
 
     const error = validateFilename(renameValue);
     if (error) {
@@ -126,7 +159,7 @@ export function useFileTreeOperations({
 
     setOperationLoading(true);
     try {
-      const response = await api.renameFile(selectedProject.projectId, {
+      const response = await fileApi.renameFile({
         oldPath: renamingItem.path,
         newName: renameValue,
       });
@@ -144,7 +177,7 @@ export function useFileTreeOperations({
     } finally {
       setOperationLoading(false);
     }
-  }, [renamingItem, renameValue, selectedProject, validateFilename, showToast, t, onRefresh, handleCancelRename]);
+  }, [renamingItem, renameValue, fileApi, validateFilename, showToast, t, onRefresh, handleCancelRename]);
 
   // Delete operations
   const handleStartDelete = useCallback((item: FileTreeNode) => {
@@ -157,11 +190,11 @@ export function useFileTreeOperations({
 
   const handleConfirmDelete = useCallback(async () => {
     const { item } = deleteConfirmation;
-    if (!item || !selectedProject) return;
+    if (!item || !fileApi.ready) return;
 
     setOperationLoading(true);
     try {
-      const response = await api.deleteFile(selectedProject.projectId, {
+      const response = await fileApi.deleteFile({
         path: item.path,
         type: item.type,
       });
@@ -184,7 +217,7 @@ export function useFileTreeOperations({
     } finally {
       setOperationLoading(false);
     }
-  }, [deleteConfirmation, selectedProject, showToast, t, onRefresh, handleCancelDelete]);
+  }, [deleteConfirmation, fileApi, showToast, t, onRefresh, handleCancelDelete]);
 
   // Create operations
   const handleStartCreate = useCallback((parentPath: string, type: 'file' | 'directory') => {
@@ -202,7 +235,7 @@ export function useFileTreeOperations({
   }, []);
 
   const handleConfirmCreate = useCallback(async () => {
-    if (!selectedProject) return;
+    if (!fileApi.ready) return;
 
     const error = validateFilename(newItemName);
     if (error) {
@@ -210,9 +243,16 @@ export function useFileTreeOperations({
       return;
     }
 
+    // Machine scope has no implicit root to fall back on: new items must name the
+    // directory they go into, which the tree's context menu always supplies.
+    if (scope === 'computer' && !newItemParent) {
+      showToast(t('fileTree.pickFolderFirst', 'Pick a folder first'), 'error');
+      return;
+    }
+
     setOperationLoading(true);
     try {
-      const response = await api.createFile(selectedProject.projectId, {
+      const response = await fileApi.createFile({
         path: newItemParent,
         type: newItemType,
         name: newItemName,
@@ -236,7 +276,7 @@ export function useFileTreeOperations({
     } finally {
       setOperationLoading(false);
     }
-  }, [selectedProject, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);
+  }, [fileApi, scope, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);
 
   // Copy path to clipboard
   const handleCopyPath = useCallback((item: FileTreeNode) => {
@@ -264,7 +304,7 @@ export function useFileTreeOperations({
 
   // Download file or folder
   const handleDownload = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
+    if (!fileApi.ready) return;
 
     setOperationLoading(true);
     try {
@@ -280,14 +320,12 @@ export function useFileTreeOperations({
     } finally {
       setOperationLoading(false);
     }
-  }, [selectedProject, showToast]);
+  }, [fileApi, showToast]);
 
   // Download a single file
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
     // Use the binary streaming endpoint so downloads preserve raw bytes.
-    const response = await api.readFileBlob(selectedProject.projectId, item.path);
+    const response = await fileApi.readFileBlob(item.path);
 
     if (!response.ok) {
       throw new Error('Failed to download file');
@@ -295,20 +333,49 @@ export function useFileTreeOperations({
 
     const blob = await response.blob();
     triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
+  }, [fileApi, triggerBrowserDownload]);
 
   // Download folder as ZIP
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
-    if (!selectedProject) return;
-
     const zip = new JSZip();
+    let fileCount = 0;
+
+    // In machine scope the tree is loaded one level at a time, so a folder the user
+    // never expanded carries no children in state. Fetch the missing levels here,
+    // otherwise the archive would silently come out empty or partial.
+    const readChildren = async (node: FileTreeNode): Promise<FileTreeNode[]> => {
+      if (node.children && node.children.length > 0) {
+        return node.children;
+      }
+
+      if (scope !== 'computer') {
+        return [];
+      }
+
+      const response = await api.fs.list(node.path);
+      if (!response.ok) {
+        throw new Error(`Failed to read "${node.name}" for ZIP export`);
+      }
+
+      const data = (await response.json()) as { items?: FileTreeNode[] };
+      return data.items ?? [];
+    };
 
     // Recursively get all files in the folder
     const collectFiles = async (node: FileTreeNode, currentPath: string) => {
       const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
 
       if (node.type === 'file') {
-        const response = await api.readFileBlob(selectedProject.projectId, node.path);
+        if (fileCount >= MAX_ZIP_FILES) {
+          throw new Error(
+            t('fileTree.zipTooLarge', 'Folder has more than {{count}} files; download it in smaller pieces', {
+              count: MAX_ZIP_FILES,
+            }),
+          );
+        }
+        fileCount += 1;
+
+        const response = await fileApi.readFileBlob(node.path);
         if (!response.ok) {
           throw new Error(`Failed to download "${node.name}" for ZIP export`);
         }
@@ -316,19 +383,15 @@ export function useFileTreeOperations({
         // Store raw bytes in the archive so binary files stay intact.
         const fileBytes = await response.arrayBuffer();
         zip.file(fullPath, fileBytes);
-      } else if (node.type === 'directory' && node.children) {
-        // Recursively process children
-        for (const child of node.children) {
+      } else if (node.type === 'directory') {
+        for (const child of await readChildren(node)) {
           await collectFiles(child, fullPath);
         }
       }
     };
 
-    // If the folder has children, process them
-    if (folder.children && folder.children.length > 0) {
-      for (const child of folder.children) {
-        await collectFiles(child, '');
-      }
+    for (const child of await readChildren(folder)) {
+      await collectFiles(child, '');
     }
 
     // Generate ZIP file
@@ -336,7 +399,7 @@ export function useFileTreeOperations({
     triggerBrowserDownload(zipBlob, `${folder.name}.zip`);
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
-  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+  }, [fileApi, scope, showToast, t, triggerBrowserDownload]);
 
   return {
     // Rename operations

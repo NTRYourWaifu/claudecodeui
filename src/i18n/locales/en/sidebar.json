@@ -3,6 +3,7 @@
     "title": "Projects",
     "newProject": "New Project",
     "deleteProject": "Remove Project",
+    "moreActions": "More actions",
     "renameProject": "Rename Project",
     "noProjects": "No projects found",
     "loadingProjects": "Loading projects...",
@@ -32,13 +33,16 @@
     "loadingSessions": "Loading sessions...",
     "unnamed": "Unnamed",
     "loading": "Loading...",
-    "showMore": "Show more sessions"
+    "showMore": "Show more sessions",
+    "statusRunning": "Working",
+    "statusUnread": "Finished, not opened yet"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
     "hideSidebar": "Hide sidebar",
     "createProject": "Create new project",
     "refresh": "Refresh projects and sessions (Ctrl+R)",
+    "moreActions": "More actions",
     "renameProject": "Rename project (F2)",
     "deleteProject": "Remove project from sidebar (Delete)",
     "addToFavorites": "Add to favorites",
@@ -120,7 +124,10 @@
     "matches_one": "{{count}} match",
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
-    "projectsScanned_other": "{{count}} projects scanned"
+    "projectsScanned_other": "{{count}} projects scanned",
+    "recentHeading": "Recent conversations",
+    "recentEmptyTitle": "No conversations yet",
+    "recentEmptyDescription": "Start a session in any project and it will show up here."
   },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",

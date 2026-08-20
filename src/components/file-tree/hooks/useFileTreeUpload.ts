@@ -1,11 +1,13 @@
 import { useCallback, useState, useRef } from 'react';
 import type { Project } from '../../../types/app';
+import type { FileTreeScope } from '../types/types';
 import { api } from '../../../utils/api';
 
 type UseFileTreeUploadOptions = {
   selectedProject: Project | null;
   onRefresh: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
+  scope?: FileTreeScope;
 };
 
 // Helper function to read all files from a directory entry recursively
@@ -61,6 +63,7 @@ export const useFileTreeUpload = ({
   selectedProject,
   onRefresh,
   showToast,
+  scope = 'project',
 }: UseFileTreeUploadOptions) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -94,6 +97,15 @@ export const useFileTreeUpload = ({
     setIsDragOver(false);
 
     const targetPath = dropTarget || '';
+
+    // Project scope treats an empty target as "the project root". Machine scope has no
+    // such root, so a drop that landed outside any folder has nowhere to go.
+    if (scope === 'computer' && !targetPath) {
+      showToast('Drop files onto a folder', 'error');
+      setDropTarget(null);
+      return;
+    }
+
     setOperationLoading(true);
 
     try {
@@ -153,11 +165,13 @@ export const useFileTreeUpload = ({
       // Send relative paths as a JSON array
       formData.append('relativePaths', JSON.stringify(relativePaths));
 
-      const response = await api.post(
-        // File upload endpoint is keyed by DB projectId post-migration.
-        `/projects/${encodeURIComponent(selectedProject!.projectId)}/files/upload`,
-        formData
-      );
+      const response = scope === 'computer'
+        ? await api.fs.uploadFiles(formData)
+        : await api.post(
+          // File upload endpoint is keyed by DB projectId post-migration.
+          `/projects/${encodeURIComponent(selectedProject!.projectId)}/files/upload`,
+          formData
+        );
 
       if (!response.ok) {
         const data = await response.json();
@@ -176,7 +190,7 @@ export const useFileTreeUpload = ({
       setOperationLoading(false);
       setDropTarget(null);
     }
-  }, [dropTarget, selectedProject, onRefresh, showToast]);
+  }, [dropTarget, scope, selectedProject, onRefresh, showToast]);
 
   const handleItemDragOver = useCallback((e: React.DragEvent, itemPath: string) => {
     e.preventDefault();

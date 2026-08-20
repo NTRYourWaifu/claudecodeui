@@ -129,6 +129,16 @@
       "refresh": "Aktualisieren",
       "menuLabel": "Datei-Kontextmenü",
       "loading": "Lädt..."
+    },
+    "quickAccess": "Schnellzugriff",
+    "drives": "Laufwerke",
+    "pickFolderFirst": "Zuerst einen Ordner auswählen",
+    "zipTooLarge": "Der Ordner enthält mehr als {{count}} Dateien; lade ihn in kleineren Teilen herunter",
+    "scope": {
+      "project": "Projekt",
+      "computer": "Dieser Computer",
+      "switchToProject": "Zurück zum Projektordner",
+      "switchToComputer": "Den ganzen Computer durchsuchen"
     }
   },
   "projectWizard": {

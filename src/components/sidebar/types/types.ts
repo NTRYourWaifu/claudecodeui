@@ -56,13 +56,16 @@ export type SidebarProps = {
   settingsInitialTab: string;
   onCloseSettings: () => void;
   isMobile: boolean;
+  /** Whether the phone drawer holding this sidebar is currently open. */
+  isDrawerOpen: boolean;
+  /** Closes the phone drawer; the Back button unwinds through this last. */
+  onCloseDrawer: () => void;
 };
 
 export type SessionViewModel = {
   isCursorSession: boolean;
   isCodexSession: boolean;
   isGeminiSession: boolean;
-  isActive: boolean;
   sessionName: string;
   sessionTime: string;
   messageCount: number;

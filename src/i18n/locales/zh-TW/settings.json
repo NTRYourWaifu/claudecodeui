@@ -1,484 +1,491 @@
 {
-  "title": "设置",
+  "title": "設定",
   "tabs": {
-    "account": "账户",
-    "permissions": "权限",
-    "mcpServers": "MCP 服务器",
-    "appearance": "外观"
+    "account": "帳號",
+    "permissions": "權限",
+    "mcpServers": "MCP 伺服器",
+    "appearance": "外觀"
   },
   "account": {
-    "title": "账户",
-    "language": "语言",
-    "languageLabel": "显示语言",
-    "languageDescription": "选择您偏好的界面语言",
-    "username": "用户名",
-    "email": "邮箱",
-    "profile": "个人资料",
-    "changePassword": "修改密码"
+    "title": "帳號",
+    "language": "語言",
+    "languageLabel": "顯示語言",
+    "languageDescription": "選擇您偏好的介面語言",
+    "username": "使用者名稱",
+    "email": "電子郵件",
+    "profile": "個人資料",
+    "changePassword": "變更密碼"
   },
   "mcp": {
-    "title": "MCP 服务器",
-    "addServer": "添加服务器",
-    "editServer": "编辑服务器",
-    "deleteServer": "删除服务器",
-    "serverName": "服务器名称",
-    "serverType": "服务器类型",
-    "config": "配置",
-    "testConnection": "测试连接",
-    "status": "状态",
-    "connected": "已连接",
-    "disconnected": "未连接",
+    "title": "MCP 伺服器",
+    "addServer": "新增伺服器",
+    "editServer": "編輯伺服器",
+    "deleteServer": "刪除伺服器",
+    "serverName": "伺服器名稱",
+    "serverType": "伺服器類型",
+    "config": "設定",
+    "testConnection": "測試連線",
+    "status": "狀態",
+    "connected": "已連線",
+    "disconnected": "未連線",
     "scope": {
-      "label": "范围",
-      "user": "用户",
-      "project": "项目"
+      "label": "範圍",
+      "user": "使用者",
+      "project": "專案"
     }
   },
   "appearance": {
-    "title": "外观",
-    "theme": "主题",
-    "codeEditor": "代码编辑器",
-    "editorTheme": "编辑器主题",
-    "wordWrap": "自动换行",
-    "showMinimap": "显示缩略图",
-    "lineNumbers": "行号",
-    "fontSize": "字体大小"
+    "title": "外觀",
+    "theme": "佈景主題",
+    "codeEditor": "程式碼編輯器",
+    "editorTheme": "編輯器主題",
+    "wordWrap": "自動換行",
+    "showMinimap": "顯示縮圖",
+    "lineNumbers": "行號",
+    "fontSize": "字型大小"
   },
   "actions": {
-    "saveChanges": "保存更改",
-    "resetToDefaults": "重置为默认值",
-    "cancelChanges": "取消更改"
+    "saveChanges": "儲存變更",
+    "resetToDefaults": "回復預設值",
+    "cancelChanges": "取消變更"
   },
   "quickSettings": {
-    "title": "快速设置",
+    "title": "快速設定",
     "sections": {
-      "appearance": "外观",
-      "toolDisplay": "工具显示",
-      "viewOptions": "视图选项",
-      "inputSettings": "输入设置"
+      "appearance": "外觀",
+      "toolDisplay": "工具顯示",
+      "viewOptions": "檢視選項",
+      "inputSettings": "輸入設定"
     },
     "darkMode": "深色模式",
-    "autoExpandTools": "自动展开工具",
-    "showRawParameters": "显示原始参数",
-    "showThinking": "显示思考过程",
-    "autoScrollToBottom": "自动滚动到底部",
-    "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
-    "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
+    "autoExpandTools": "自動展開工具",
+    "showRawParameters": "顯示原始參數",
+    "showThinking": "顯示思考過程",
+    "autoScrollToBottom": "自動捲到最下方",
+    "sendByCtrlEnter": "用 Ctrl+Enter 送出",
+    "sendByCtrlEnterDescription": "啟用後改用 Ctrl+Enter 送出訊息，而不是只按 Enter。使用輸入法時可避免誤送。",
     "dragHandle": {
-      "dragging": "正在拖拽手柄",
-      "closePanel": "关闭设置面板",
-      "openPanel": "打开设置面板",
-      "draggingStatus": "正在拖拽...",
-      "toggleAndMove": "点击切换，拖拽移动"
+      "dragging": "正在拖曳把手",
+      "closePanel": "關閉設定面板",
+      "openPanel": "開啟設定面板",
+      "draggingStatus": "拖曳中...",
+      "toggleAndMove": "點一下切換，拖曳可移動"
     }
   },
   "terminalShortcuts": {
-    "title": "终端快捷键",
-    "sectionKeys": "按键",
-    "sectionNavigation": "导航",
+    "title": "終端機快速鍵",
+    "sectionKeys": "按鍵",
+    "sectionNavigation": "瀏覽",
     "escape": "Escape",
     "tab": "Tab",
     "shiftTab": "Shift+Tab",
-    "arrowUp": "上箭头",
-    "arrowDown": "下箭头",
-    "scrollDown": "滚动到底部",
+    "arrowUp": "上方向鍵",
+    "arrowDown": "下方向鍵",
+    "scrollDown": "捲到最下方",
     "handle": {
-      "closePanel": "关闭快捷键面板",
-      "openPanel": "打开快捷键面板"
+      "closePanel": "關閉快速鍵面板",
+      "openPanel": "開啟快速鍵面板"
     }
   },
   "mainTabs": {
-    "label": "设置",
-    "agents": "智能体",
-    "appearance": "外观",
+    "label": "設定",
+    "agents": "Agent",
+    "appearance": "外觀",
     "git": "Git",
-    "apiTokens": "API 和令牌",
-    "tasks": "任务",
+    "apiTokens": "API 與權杖",
+    "tasks": "任務",
     "notifications": "通知",
-    "plugins": "插件",
-    "about": "关于"
+    "plugins": "外掛",
+    "about": "關於"
   },
   "notifications": {
     "title": "通知",
-    "description": "控制你希望接收的通知事件。",
+    "description": "控制您想收到哪些通知事件。",
     "webPush": {
-      "title": "Web 推送通知",
-      "enable": "启用推送通知",
-      "disable": "关闭推送通知",
-      "enabled": "推送通知已启用",
+      "title": "網頁推播通知",
+      "enable": "啟用推播通知",
+      "disable": "關閉推播通知",
+      "enabled": "推播通知已啟用",
       "loading": "更新中...",
-      "unsupported": "此浏览器不支持推送通知。",
-      "denied": "推送通知已被阻止，请在浏览器设置中允许。"
+      "unsupported": "這個瀏覽器不支援推播通知。",
+      "denied": "推播通知已被封鎖，請在瀏覽器設定中允許。"
     },
     "events": {
-      "title": "事件类型",
-      "actionRequired": "需要处理",
-      "stop": "运行已停止",
-      "error": "运行失败"
+      "title": "事件類型",
+      "actionRequired": "需要您處理",
+      "stop": "執行已停止",
+      "error": "執行失敗"
     }
   },
   "appearanceSettings": {
     "darkMode": {
       "label": "深色模式",
-      "description": "切换浅色和深色主题"
+      "description": "在淺色與深色主題之間切換"
     },
     "projectSorting": {
-      "label": "项目排序",
-      "description": "项目在侧边栏中的排列方式",
-      "alphabetical": "按字母顺序",
-      "recentActivity": "最近活动"
+      "label": "專案排序",
+      "description": "專案在側邊欄的排列方式",
+      "alphabetical": "依字母順序",
+      "recentActivity": "最近活動"
     },
     "codeEditor": {
-      "title": "代码编辑器",
+      "title": "程式碼編輯器",
       "theme": {
-        "label": "编辑器主题",
-        "description": "代码编辑器的默认主题"
+        "label": "編輯器主題",
+        "description": "程式碼編輯器的預設主題"
       },
       "wordWrap": {
-        "label": "自动换行",
-        "description": "在编辑器中默认启用自动换行"
+        "label": "自動換行",
+        "description": "編輯器預設啟用自動換行"
       },
       "showMinimap": {
-        "label": "显示缩略图",
-        "description": "在差异视图中显示缩略图以便于导航"
+        "label": "顯示縮圖",
+        "description": "在差異檢視中顯示縮圖，方便定位"
       },
       "lineNumbers": {
-        "label": "显示行号",
-        "description": "在编辑器中显示行号"
+        "label": "顯示行號",
+        "description": "在編輯器中顯示行號"
       },
       "fontSize": {
-        "label": "字体大小",
-        "description": "编辑器字体大小（px）"
+        "label": "字型大小",
+        "description": "編輯器字型大小（px）"
       }
     }
   },
   "mcpForm": {
     "title": {
-      "add": "添加 MCP 服务器",
-      "edit": "编辑 MCP 服务器"
+      "add": "新增 MCP 伺服器",
+      "edit": "編輯 MCP 伺服器"
     },
     "importMode": {
-      "form": "表单输入",
-      "json": "JSON 导入"
+      "form": "表單輸入",
+      "json": "JSON 匯入"
     },
     "scope": {
-      "label": "范围",
-      "userGlobal": "用户（全局）",
-      "projectLocal": "项目（本地）",
-      "userDescription": "用户范围：在您机器上的所有项目中可用",
-      "projectDescription": "本地范围：仅在选定项目中可用",
-      "cannotChange": "编辑现有服务器时无法更改范围"
+      "label": "範圍",
+      "userGlobal": "使用者（全域）",
+      "projectLocal": "專案（本機）",
+      "userDescription": "使用者範圍：在這台機器上的所有專案都可使用",
+      "projectDescription": "本機範圍：只在選定的專案可使用",
+      "cannotChange": "編輯現有伺服器時無法變更範圍"
     },
     "fields": {
-      "serverName": "服务器名称",
-      "transportType": "传输类型",
-      "command": "命令",
-      "arguments": "参数（每行一个）",
-      "jsonConfig": "JSON 配置",
+      "serverName": "伺服器名稱",
+      "transportType": "傳輸類型",
+      "command": "指令",
+      "arguments": "參數（每行一個）",
+      "jsonConfig": "JSON 設定",
       "url": "URL",
-      "envVars": "环境变量（KEY=值，每行一个）",
-      "headers": "请求头（KEY=值，每行一个）",
-      "selectProject": "选择项目..."
+      "envVars": "環境變數（KEY=值，每行一個）",
+      "headers": "請求標頭（KEY=值，每行一個）",
+      "selectProject": "選擇專案..."
     },
     "placeholders": {
-      "serverName": "我的服务"
+      "serverName": "我的服務"
     },
     "validation": {
-      "missingType": "缺少必填字段：type",
-      "stdioRequiresCommand": "stdio 类型需要 command 字段",
-      "httpRequiresUrl": "{{type}} 类型需要 url 字段",
-      "invalidJson": "无效的 JSON 格式",
-      "jsonHelp": "粘贴您的 MCP 服务器配置（JSON 格式）。示例格式：",
+      "missingType": "缺少必填欄位：type",
+      "stdioRequiresCommand": "stdio 類型需要 command 欄位",
+      "httpRequiresUrl": "{{type}} 類型需要 url 欄位",
+      "invalidJson": "JSON 格式無效",
+      "jsonHelp": "貼上您的 MCP 伺服器設定（JSON 格式）。範例：",
       "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
       "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
     },
-    "configDetails": "配置详细信息（来自 {{configFile}}）",
-    "projectPath": "路径：{{path}}",
+    "configDetails": "設定詳細資料（來自 {{configFile}}）",
+    "projectPath": "路徑：{{path}}",
     "actions": {
       "cancel": "取消",
-      "saving": "保存中...",
-      "addServer": "添加服务器",
-      "updateServer": "更新服务器"
+      "saving": "儲存中...",
+      "addServer": "新增伺服器",
+      "updateServer": "更新伺服器"
     }
   },
   "saveStatus": {
-    "success": "设置保存成功！",
-    "error": "保存设置失败",
-    "saving": "保存中..."
+    "success": "設定儲存成功！",
+    "error": "儲存設定失敗",
+    "saving": "儲存中..."
   },
   "footerActions": {
-    "save": "保存设置",
+    "save": "儲存設定",
     "cancel": "取消"
   },
   "git": {
-    "title": "Git 配置",
-    "description": "配置您的 git 提交身份。这些设置将通过 git config --global 全局应用",
+    "title": "Git 設定",
+    "description": "設定您的 git commit 身分。這些設定會透過 git config --global 全域套用",
     "name": {
-      "label": "Git 名称",
-      "help": "您的 git 提交名称"
+      "label": "Git 名稱",
+      "help": "您在 git commit 中使用的名稱"
     },
     "email": {
-      "label": "Git 邮箱",
-      "help": "您的 git 提交邮箱"
+      "label": "Git 電子郵件",
+      "help": "您在 git commit 中使用的電子郵件"
     },
     "actions": {
-      "save": "保存配置",
-      "saving": "保存中..."
+      "save": "儲存設定",
+      "saving": "儲存中..."
     },
     "status": {
-      "success": "保存成功"
+      "success": "儲存成功"
     }
   },
   "apiKeys": {
-    "title": "API 密钥",
-    "description": "生成 API 密钥以从其他应用访问外部 API。",
+    "title": "API 金鑰",
+    "description": "產生 API 金鑰，讓其他應用程式可以存取外部 API。",
     "newKey": {
-      "alertTitle": "⚠️ 保存您的 API 密钥",
-      "alertMessage": "这是您唯一一次看到此密钥。请妥善保存。",
+      "alertTitle": "⚠️ 請保存您的 API 金鑰",
+      "alertMessage": "這是您唯一一次看到這把金鑰，請妥善保存。",
       "iveSavedIt": "我已保存"
     },
     "form": {
-      "placeholder": "API 密钥名称（例如：生产服务器）",
-      "createButton": "创建",
+      "placeholder": "API 金鑰名稱（例如：正式伺服器）",
+      "createButton": "建立",
       "cancelButton": "取消"
     },
-    "newButton": "新建 API 密钥",
-    "empty": "尚未创建 API 密钥。",
+    "newButton": "新增 API 金鑰",
+    "empty": "尚未建立任何 API 金鑰。",
     "list": {
-      "created": "创建时间：",
-      "lastUsed": "最后使用："
+      "created": "建立時間：",
+      "lastUsed": "最後使用："
     },
-    "confirmDelete": "确定要删除此 API 密钥吗？",
+    "confirmDelete": "確定要刪除這把 API 金鑰嗎？",
     "status": {
-      "active": "激活",
-      "inactive": "未激活"
+      "active": "啟用中",
+      "inactive": "未啟用"
     },
     "github": {
-      "title": "GitHub 令牌",
-      "description": "添加 GitHub 个人访问令牌以通过外部 API 克隆私有仓库。",
-      "descriptionAlt": "添加 GitHub 个人访问令牌以克隆私有仓库。您也可以直接在 API 请求中传递令牌而无需存储。",
-      "addButton": "添加令牌",
+      "title": "GitHub 權杖",
+      "description": "新增 GitHub 個人存取權杖，即可透過外部 API 複製私有儲存庫。",
+      "descriptionAlt": "新增 GitHub 個人存取權杖即可複製私有儲存庫。您也可以直接在 API 請求中帶入權杖，不必儲存。",
+      "addButton": "新增權杖",
       "form": {
-        "namePlaceholder": "令牌名称（例如：个人仓库）",
-        "tokenPlaceholder": "GitHub 个人访问令牌（ghp_...）",
-        "descriptionPlaceholder": "描述（可选）",
-        "addButton": "添加令牌",
+        "namePlaceholder": "權杖名稱（例如：個人儲存庫）",
+        "tokenPlaceholder": "GitHub 個人存取權杖（ghp_...）",
+        "descriptionPlaceholder": "說明（選填）",
+        "addButton": "新增權杖",
         "cancelButton": "取消",
-        "howToCreate": "如何创建 GitHub 个人访问令牌 →"
+        "howToCreate": "如何建立 GitHub 個人存取權杖 →"
       },
-      "empty": "尚未添加 GitHub 令牌。",
-      "added": "添加时间：",
-      "confirmDelete": "确定要删除此 GitHub 令牌吗？"
+      "empty": "尚未新增任何 GitHub 權杖。",
+      "added": "新增時間：",
+      "confirmDelete": "確定要刪除這個 GitHub 權杖嗎？"
     },
-    "apiDocsLink": "API 文档",
+    "apiDocsLink": "API 文件",
     "documentation": {
-      "title": "外部 API 文档",
-      "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Cursor 会话。",
-      "viewLink": "查看 API 文档 →"
+      "title": "外部 API 文件",
+      "description": "了解如何用外部 API 從您的程式觸發 Claude／Cursor 對話。",
+      "viewLink": "查看 API 文件 →"
     },
-    "loading": "加载中...",
+    "loading": "載入中...",
     "version": {
       "updateAvailable": "有可用更新：v{{version}}"
     }
   },
   "tasks": {
-    "checking": "正在检查 TaskMaster 安装...",
+    "checking": "正在檢查 TaskMaster 是否已安裝...",
     "notInstalled": {
-      "title": "未安装 TaskMaster AI CLI",
-      "description": "需要 TaskMaster CLI 才能使用任务管理功能。安装它以开始使用：",
+      "title": "尚未安裝 TaskMaster AI CLI",
+      "description": "任務管理功能需要 TaskMaster CLI，安裝後即可使用：",
       "installCommand": "npm install -g task-master-ai",
       "viewOnGitHub": "在 GitHub 上查看",
-      "afterInstallation": "安装后：",
+      "afterInstallation": "安裝之後：",
       "steps": {
-        "restart": "重启此应用程序",
-        "autoAvailable": "TaskMaster 功能将自动可用",
-        "initCommand": "在项目目录中使用 task-master init"
+        "restart": "重新啟動這個應用程式",
+        "autoAvailable": "TaskMaster 功能會自動可用",
+        "initCommand": "在專案目錄執行 task-master init"
       }
     },
     "settings": {
-      "enableLabel": "启用 TaskMaster 集成",
-      "enableDescription": "在整个界面中显示 TaskMaster 任务、横幅和侧边栏指示器"
+      "enableLabel": "啟用 TaskMaster 整合",
+      "enableDescription": "在整個介面顯示 TaskMaster 的任務、橫幅與側邊欄指示"
     }
   },
   "agents": {
     "authStatus": {
-      "checking": "检查中...",
-      "connected": "已连接",
-      "notConnected": "未连接",
-      "disconnected": "已断开",
-      "checkingAuth": "正在检查认证状态...",
-      "loggedInAs": "登录为 {{email}}",
-      "authenticatedUser": "已认证用户"
+      "checking": "檢查中...",
+      "connected": "已連線",
+      "notConnected": "未連線",
+      "disconnected": "已中斷連線",
+      "checkingAuth": "正在檢查認證狀態...",
+      "loggedInAs": "已登入為 {{email}}",
+      "authenticatedUser": "已認證的使用者"
     },
     "account": {
       "claude": {
-        "description": "Anthropic Claude AI 助手"
+        "description": "Anthropic Claude AI 助理"
       },
       "cursor": {
-        "description": "Cursor AI 驱动的代码编辑器"
+        "description": "Cursor AI 程式編輯器"
       },
       "codex": {
-        "description": "OpenAI Codex AI 助手"
+        "description": "OpenAI Codex AI 助理"
       },
       "gemini": {
-        "description": "Google Gemini AI 助手"
+        "description": "Google Gemini AI 助理"
       }
     },
-    "connectionStatus": "连接状态",
+    "connectionStatus": "連線狀態",
     "login": {
-      "title": "登录",
-      "reAuthenticate": "重新认证",
-      "description": "登录您的 {{agent}} 账户以启用 AI 功能",
-      "reAuthDescription": "使用其他账户登录或刷新凭据",
-      "button": "登录",
-      "reLoginButton": "重新登录"
+      "title": "登入",
+      "reAuthenticate": "重新認證",
+      "description": "登入您的 {{agent}} 帳號以啟用 AI 功能",
+      "reAuthDescription": "改用其他帳號登入，或重新整理憑證",
+      "button": "登入",
+      "reLoginButton": "重新登入"
     },
-    "error": "错误：{{error}}"
+    "error": "錯誤：{{error}}"
   },
   "permissions": {
-    "title": "权限设置",
+    "title": "權限設定",
     "skipPermissions": {
-      "label": "跳过权限提示（请谨慎使用）",
-      "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
-      "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
+      "label": "略過權限詢問（請謹慎使用）",
+      "claudeDescription": "等同於 --dangerously-skip-permissions 參數",
+      "cursorDescription": "等同於 Cursor CLI 的 -f 參數"
     },
     "allowedTools": {
-      "title": "允许的工具",
-      "description": "无需权限提示即可自动使用的工具",
+      "title": "允許的工具",
+      "description": "不需詢問權限就能自動使用的工具",
       "placeholder": "例如：\"Bash(git log:*)\" 或 \"Write\"",
-      "quickAdd": "快速添加常用工具：",
-      "empty": "未配置允许的工具"
+      "quickAdd": "快速加入常用工具：",
+      "empty": "尚未設定允許的工具"
     },
     "blockedTools": {
-      "title": "禁用的工具",
-      "description": "无需权限提示即可自动禁用的工具",
+      "title": "停用的工具",
+      "description": "不需詢問權限就直接停用的工具",
       "placeholder": "例如：\"Bash(rm:*)\"",
-      "empty": "未配置禁用的工具"
+      "empty": "尚未設定停用的工具"
     },
     "allowedCommands": {
-      "title": "允许的 Shell 命令",
-      "description": "无需权限提示即可自动执行的 Shell 命令",
+      "title": "允許的 Shell 指令",
+      "description": "不需詢問權限就能自動執行的 Shell 指令",
       "placeholder": "例如：\"Shell(ls)\" 或 \"Shell(git status)\"",
-      "quickAdd": "快速添加常用命令：",
-      "empty": "未配置允许的命令"
+      "quickAdd": "快速加入常用指令：",
+      "empty": "尚未設定允許的指令"
     },
     "blockedCommands": {
-      "title": "阻止的 Shell 命令",
-      "description": "自动阻止的 Shell 命令",
+      "title": "封鎖的 Shell 指令",
+      "description": "會被自動封鎖的 Shell 指令",
       "placeholder": "例如：\"Shell(rm -rf)\" 或 \"Shell(sudo)\"",
-      "empty": "未配置阻止的命令"
+      "empty": "尚未設定封鎖的指令"
     },
     "toolExamples": {
-      "title": "工具模式示例：",
-      "bashGitLog": "- 允许所有 git log 命令",
-      "bashGitDiff": "- 允许所有 git diff 命令",
-      "write": "- 允许所有 Write 工具使用",
-      "bashRm": "- 阻止所有 rm 命令（危险）"
+      "title": "工具樣式範例：",
+      "bashGitLog": "- 允許所有 git log 指令",
+      "bashGitDiff": "- 允許所有 git diff 指令",
+      "write": "- 允許所有 Write 工具的使用",
+      "bashRm": "- 封鎖所有 rm 指令（危險）"
     },
     "shellExamples": {
-      "title": "Shell 命令示例：",
-      "ls": "- 允许 ls 命令",
-      "gitStatus": "- 允许 git status",
-      "npmInstall": "- 允许 npm install",
-      "rmRf": "- 阻止递归删除"
+      "title": "Shell 指令範例：",
+      "ls": "- 允許 ls 指令",
+      "gitStatus": "- 允許 git status",
+      "npmInstall": "- 允許 npm install",
+      "rmRf": "- 封鎖遞迴刪除"
     },
     "codex": {
-      "permissionMode": "权限模式",
-      "description": "控制 Codex 如何处理文件修改和命令执行",
+      "permissionMode": "權限模式",
+      "description": "控制 Codex 如何處理檔案修改與指令執行",
       "modes": {
         "default": {
-          "title": "默认",
-          "description": "只有受信任的命令（ls、cat、grep、git status 等）会自动运行。其他命令将被跳过。可以写入工作区。"
+          "title": "預設",
+          "description": "只有受信任的指令（ls、cat、grep、git status 等）會自動執行，其他指令會被略過。可以寫入工作區。"
         },
         "acceptEdits": {
-          "title": "接受编辑",
-          "description": "所有命令在工作区内自动运行。具有沙箱执行的全自动模式。"
+          "title": "接受編輯",
+          "description": "工作區內的所有指令自動執行。全自動模式，並在沙箱中執行。"
         },
         "bypassPermissions": {
-          "title": "绕过权限",
-          "description": "完全系统访问，无任何限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。"
+          "title": "略過權限",
+          "description": "完全的系統存取權，沒有任何限制。所有指令自動執行，並可完整存取磁碟與網路。請謹慎使用。"
         }
       },
-      "technicalDetails": "技术详情",
+      "technicalDetails": "技術細節",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。受信任的命令：cat、cd、grep、head、ls、pwd、tail、git status/log/diff/show、find（不带 -exec）等。",
-        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有命令在项目目录内自动执行。",
-        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系统访问权限，仅在可信环境中使用。",
-        "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"
+        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。受信任的指令：cat、cd、grep、head、ls、pwd、tail、git status/log/diff/show、find（不含 -exec）等。",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有指令都會在專案目錄內自動執行。",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全的系統存取權，只在可信任的環境使用。",
+        "overrideNote": "您可以用對話介面裡的模式按鈕，針對單次對話覆寫這個設定。"
       }
     },
     "actions": {
-      "add": "添加"
+      "add": "新增"
     }
   },
   "mcpServers": {
-    "title": "MCP 服务器",
+    "title": "MCP 伺服器",
     "description": {
-      "claude": "Model Context Protocol 服务器为 Claude 提供额外的工具和数据源",
-      "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
-      "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
+      "claude": "Model Context Protocol 伺服器可以為 Claude 提供額外的工具與資料來源",
+      "cursor": "Model Context Protocol 伺服器可以為 Cursor 提供額外的工具與資料來源",
+      "codex": "Model Context Protocol 伺服器可以為 Codex 提供額外的工具與資料來源"
     },
-    "addButton": "添加 MCP 服务器",
-    "empty": "未配置 MCP 服务器",
-    "serverType": "类型",
+    "addButton": "新增 MCP 伺服器",
+    "empty": "尚未設定 MCP 伺服器",
+    "serverType": "類型",
     "scope": {
-      "local": "本地",
-      "user": "用户"
+      "local": "本機",
+      "user": "使用者"
     },
     "config": {
-      "command": "命令",
+      "command": "指令",
       "url": "URL",
-      "args": "参数",
-      "environment": "环境变量"
+      "args": "參數",
+      "environment": "環境變數"
     },
     "tools": {
       "title": "工具",
       "count": "（{{count}}）：",
-      "more": "还有 {{count}} 个"
+      "more": "還有 {{count}} 個"
     },
     "actions": {
-      "edit": "编辑服务器",
-      "delete": "删除服务器"
+      "edit": "編輯伺服器",
+      "delete": "刪除伺服器"
     },
     "help": {
-      "title": "关于 Codex MCP",
-      "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
+      "title": "關於 Codex MCP",
+      "description": "Codex 支援以 stdio 為基礎的 MCP 伺服器。您可以新增伺服器，用額外的工具與資源擴充 Codex 的能力。"
     }
   },
   "pluginSettings": {
-    "title": "插件",
-    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.claude-code-ui/plugins/",
+    "title": "外掛",
+    "description": "用自訂外掛擴充介面。可從 git 安裝，或直接把資料夾放進 ~/.claude-code-ui/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
-    "installButton": "安装",
-    "installing": "安装中…",
-    "securityWarning": "仅安装您已审查过源代码或信任作者的插件。",
-    "scanningPlugins": "正在扫描插件…",
-    "noPluginsInstalled": "未安装插件",
-    "pullLatest": "从 git 拉取最新内容",
-    "noGitRemote": "无 git 远程仓库 — 无法更新",
-    "uninstallPlugin": "卸载插件",
-    "confirmUninstall": "再次点击确认",
-    "confirmUninstallMessage": "移除 {{name}}？此操作无法撤销。",
+    "installButton": "安裝",
+    "installing": "安裝中…",
+    "securityWarning": "只安裝您看過原始碼、或作者您信得過的外掛。",
+    "scanningPlugins": "正在掃描外掛…",
+    "noPluginsInstalled": "尚未安裝任何外掛",
+    "pullLatest": "從 git 拉取最新版本",
+    "noGitRemote": "沒有 git 遠端 — 無法更新",
+    "uninstallPlugin": "解除安裝外掛",
+    "confirmUninstall": "再點一次確認",
+    "confirmUninstallMessage": "要移除 {{name}} 嗎？此操作無法復原。",
     "cancel": "取消",
     "remove": "移除",
-    "updateFailed": "更新失败",
-    "installFailed": "安装失败",
-    "uninstallFailed": "卸载失败",
-    "toggleFailed": "切换失败",
-    "buildYourOwn": "构建您自己的插件",
-    "starter": "入门模板",
-    "docs": "文档",
+    "updateFailed": "更新失敗",
+    "installFailed": "安裝失敗",
+    "uninstallFailed": "解除安裝失敗",
+    "toggleFailed": "切換失敗",
+    "buildYourOwn": "打造您自己的外掛",
+    "starterPluginLabel": "入門外掛",
+    "starter": "入門範本",
+    "docs": "文件",
     "starterPlugin": {
-      "name": "项目统计",
-      "badge": "入门",
-      "description": "查看项目的文件数、代码行数、文件类型分布以及最近活动。",
-      "install": "安装"
+      "name": "專案統計",
+      "badge": "入門",
+      "description": "查看專案的檔案數、程式碼行數、檔案類型分布與最近活動。",
+      "install": "安裝"
+    },
+    "terminalPlugin": {
+      "name": "終端機",
+      "badge": "入門",
+      "description": "在專案目錄中直接開一個互動式的終端機分頁。",
+      "install": "安裝"
     },
     "morePlugins": "更多",
-    "enable": "启用",
-    "disable": "禁用",
-    "installAriaLabel": "插件 git 仓库 URL",
-    "tab": "标签",
-    "runningStatus": "运行中"
+    "enable": "啟用",
+    "disable": "停用",
+    "installAriaLabel": "外掛的 git 儲存庫網址",
+    "tab": "分頁",
+    "runningStatus": "執行中"
   }
 }

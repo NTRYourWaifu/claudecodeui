@@ -3,6 +3,7 @@
     "title": "Projekte",
     "newProject": "Neues Projekt",
     "deleteProject": "Projekt entfernen",
+    "moreActions": "Weitere Aktionen",
     "renameProject": "Projekt umbenennen",
     "noProjects": "Keine Projekte gefunden",
     "loadingProjects": "Projekte werden geladen...",
@@ -32,13 +33,16 @@
     "loadingSessions": "Sitzungen werden geladen...",
     "unnamed": "Unbenannt",
     "loading": "Lädt...",
-    "showMore": "Weitere Sitzungen anzeigen"
+    "showMore": "Weitere Sitzungen anzeigen",
+    "statusRunning": "Arbeitet",
+    "statusUnread": "Fertig, noch nicht geöffnet"
   },
   "tooltips": {
     "viewEnvironments": "Umgebungen anzeigen",
     "hideSidebar": "Seitenleiste ausblenden",
     "createProject": "Neues Projekt erstellen",
     "refresh": "Projekte und Sitzungen aktualisieren (Strg+R)",
+    "moreActions": "Weitere Aktionen",
     "renameProject": "Projekt umbenennen (F2)",
     "deleteProject": "Projekt aus Seitenleiste entfernen (Entf)",
     "addToFavorites": "Zu Favoriten hinzufügen",

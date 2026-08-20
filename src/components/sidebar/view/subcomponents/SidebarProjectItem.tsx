@@ -1,8 +1,11 @@
-import { Check, ChevronDown, ChevronRight, Edit3, Folder, FolderOpen, Star, Trash2, X } from 'lucide-react';
+import { useCallback, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, Edit3, Folder, FolderOpen, MoreHorizontal, Plus, Star, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
+import { useAnchoredMenu } from '../../../../hooks/useAnchoredMenu';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { MCPServerStatus, SessionWithProvider } from '../../types/types';
 import { getTaskIndicatorStatus } from '../../utils/utils';
@@ -10,11 +13,16 @@ import { getTaskIndicatorStatus } from '../../utils/utils';
 import TaskIndicator from './TaskIndicator';
 import SidebarProjectSessions from './SidebarProjectSessions';
 
+const MENU_PANEL_CLASS =
+  'flex flex-col overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-xl';
+const MENU_ITEM_CLASS = 'flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent';
+
 type SidebarProjectItemProps = {
   project: Project;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   isExpanded: boolean;
+  isFullyExpanded: boolean;
   isDeleting: boolean;
   isStarred: boolean;
   editingProject: string | null;
@@ -29,6 +37,7 @@ type SidebarProjectItemProps = {
   mcpServerStatus: MCPServerStatus;
   onEditingNameChange: (name: string) => void;
   onToggleProject: (projectName: string) => void;
+  onSetFullyExpandedProject: (projectId: string | null) => void;
   onProjectSelect: (project: Project) => void;
   onToggleStarProject: (projectName: string) => void;
   onStartEditingProject: (project: Project) => void;
@@ -61,6 +70,7 @@ export default function SidebarProjectItem({
   selectedProject,
   selectedSession,
   isExpanded,
+  isFullyExpanded,
   isDeleting,
   isStarred,
   editingProject,
@@ -75,6 +85,7 @@ export default function SidebarProjectItem({
   mcpServerStatus,
   onEditingNameChange,
   onToggleProject,
+  onSetFullyExpandedProject,
   onProjectSelect,
   onToggleStarProject,
   onStartEditingProject,
@@ -100,6 +111,10 @@ export default function SidebarProjectItem({
   const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
   const taskStatus = getTaskIndicatorStatus(project, mcpServerStatus);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const menu = useAnchoredMenu(menuOpen, closeMenu, { maxWidth: 220, placement: 'auto' });
+
   const toggleProject = () => onToggleProject(project.projectId);
   const toggleStarProject = () => onToggleStarProject(project.projectId);
 
@@ -114,6 +129,55 @@ export default function SidebarProjectItem({
 
     toggleProject();
   };
+
+  // The row itself is the expand/collapse control, so every button sitting on it
+  // has to stop the click from bubbling — otherwise starting a new session would
+  // also toggle the project open or shut.
+  const startNewSession = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onProjectSelect(project);
+    onNewSession(project);
+  };
+
+  // The mobile and desktop rows are two separate layouts that are both mounted,
+  // with one hidden by CSS. Anchoring on the button that was actually clicked
+  // avoids measuring the hidden copy, which reports a zero-sized rect.
+  const openMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    menu.triggerRef.current = event.currentTarget;
+    setMenuOpen((previous) => !previous);
+  };
+
+  const runMenuAction = (action: () => void) => {
+    closeMenu();
+    action();
+  };
+
+  const rowActions = (
+    <>
+      <button
+        type="button"
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 active:scale-90"
+        onClick={startNewSession}
+        title={t('sessions.newSession')}
+        aria-label={t('sessions.newSession')}
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+
+      <button
+        type="button"
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40 transition-colors hover:bg-muted active:scale-90"
+        onClick={openMenu}
+        title={t('tooltips.moreActions')}
+        aria-label={t('tooltips.moreActions')}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+      >
+        <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+      </button>
+    </>
+  );
 
   return (
     <div className={cn('md:space-y-1', isDeleting && 'opacity-50 pointer-events-none')}>
@@ -188,7 +252,7 @@ export default function SidebarProjectItem({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 {isEditing ? (
                   <>
                     <button
@@ -211,68 +275,21 @@ export default function SidebarProjectItem({
                     </button>
                   </>
                 ) : (
-                  <>
-                    <button
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border',
-                        isStarred
-                          ? 'bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800'
-                          : 'bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800',
-                      )}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleStarProject();
-                      }}
-                      title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
-                    >
-                      <Star
-                        className={cn(
-                          'w-4 h-4 transition-colors',
-                          isStarred
-                            ? 'text-yellow-600 dark:text-yellow-400 fill-current'
-                            : 'text-gray-600 dark:text-gray-400',
-                        )}
-                      />
-                    </button>
-
-                    <button
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-500/10 active:scale-90 dark:border-red-800 dark:bg-red-900/30"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDeleteProject(project);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    </button>
-
-                    <button
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 active:scale-90 dark:border-primary/30 dark:bg-primary/20"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onStartEditingProject(project);
-                      }}
-                    >
-                      <Edit3 className="h-4 w-4 text-primary" />
-                    </button>
-
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted/30">
-                      {isExpanded ? (
-                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                      )}
-                    </div>
-                  </>
+                  rowActions
                 )}
               </div>
             </div>
           </div>
         </div>
 
+        {/* The action buttons live beside the row button rather than inside it:
+            a <button> cannot legally nest another one, and they are now always
+            visible instead of appearing on hover. */}
+        <div className="hidden w-full items-center gap-1.5 pr-1 md:flex">
         <Button
           variant="ghost"
           className={cn(
-            'hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50',
+            'flex min-w-0 flex-1 justify-between p-2 h-auto font-normal hover:bg-accent/50',
             isSelected && 'bg-accent text-accent-foreground',
             isStarred &&
               !isSelected &&
@@ -328,84 +345,99 @@ export default function SidebarProjectItem({
             </div>
           </div>
 
-          <div className="flex flex-shrink-0 items-center gap-1">
+        </Button>
+
+          <div className="flex flex-shrink-0 items-center gap-1.5">
             {isEditing ? (
               <>
-                <div
-                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/20"
+                <button
+                  type="button"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-green-600 transition-colors hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/20"
                   onClick={(event) => {
                     event.stopPropagation();
                     saveProjectName();
                   }}
+                  title={t('tooltips.save')}
                 >
-                  <Check className="h-3 w-3" />
-                </div>
-                <div
-                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800"
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800"
                   onClick={(event) => {
                     event.stopPropagation();
                     onCancelEditingProject();
                   }}
+                  title={t('tooltips.cancel')}
                 >
-                  <X className="h-3 w-3" />
-                </div>
+                  <X className="h-4 w-4" />
+                </button>
               </>
             ) : (
-              <>
-                <div
-                  className={cn(
-                    'w-6 h-6 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100',
-                    isStarred ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 opacity-100' : 'hover:bg-accent',
-                  )}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleStarProject();
-                  }}
-                  title={isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
-                >
-                  <Star
-                    className={cn(
-                      'w-3 h-3 transition-colors',
-                      isStarred
-                        ? 'text-yellow-600 dark:text-yellow-400 fill-current'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                </div>
-                <div
-                  className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onStartEditingProject(project);
-                  }}
-                  title={t('tooltips.renameProject')}
-                >
-                  <Edit3 className="h-3 w-3" />
-                </div>
-                <div
-                  className="touch:opacity-100 flex h-6 w-6 cursor-pointer items-center justify-center rounded opacity-0 transition-all duration-200 hover:bg-red-50 group-hover:opacity-100 dark:hover:bg-red-900/20"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDeleteProject(project);
-                  }}
-                  title={t('tooltips.deleteProject')}
-                >
-                  <Trash2 className="h-3 w-3 text-red-600 dark:text-red-400" />
-                </div>
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-                )}
-              </>
+              rowActions
             )}
           </div>
-        </Button>
+        </div>
       </div>
+
+      {menuOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menu.panelRef}
+          style={menu.style || { position: 'fixed', top: 0, left: 0, visibility: 'hidden' }}
+          className={MENU_PANEL_CLASS}
+          role="menu"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={MENU_ITEM_CLASS}
+            onClick={(event) => {
+              event.stopPropagation();
+              runMenuAction(toggleStarProject);
+            }}
+          >
+            <Star
+              className={cn(
+                'h-4 w-4 flex-shrink-0',
+                isStarred ? 'fill-current text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground',
+              )}
+            />
+            {isStarred ? t('tooltips.removeFromFavorites') : t('tooltips.addToFavorites')}
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            className={cn(MENU_ITEM_CLASS, 'border-t border-border/60')}
+            onClick={(event) => {
+              event.stopPropagation();
+              runMenuAction(() => onStartEditingProject(project));
+            }}
+          >
+            <Edit3 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            {t('tooltips.renameProject')}
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            className={cn(MENU_ITEM_CLASS, 'border-t border-border/60 text-red-600 dark:text-red-400')}
+            onClick={(event) => {
+              event.stopPropagation();
+              runMenuAction(() => onDeleteProject(project));
+            }}
+          >
+            <Trash2 className="h-4 w-4 flex-shrink-0" />
+            {t('tooltips.deleteProject')}
+          </button>
+        </div>,
+        document.body,
+      )}
 
       <SidebarProjectSessions
         project={project}
         isExpanded={isExpanded}
+        isFullyExpanded={isFullyExpanded}
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}
@@ -422,7 +454,7 @@ export default function SidebarProjectItem({
         onSessionSelect={onSessionSelect}
         onDeleteSession={onDeleteSession}
         onLoadMoreSessions={onLoadMoreSessions}
-        onNewSession={onNewSession}
+        onExpandFully={() => onSetFullyExpandedProject(project.projectId)}
         t={t}
       />
     </div>

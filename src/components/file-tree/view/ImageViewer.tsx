@@ -10,7 +10,10 @@ type ImageViewerProps = {
 };
 
 export default function ImageViewer({ file, onClose }: ImageViewerProps) {
-  const imagePath = `/api/projects/${file.projectId}/files/content?path=${encodeURIComponent(file.path)}`;
+  // Machine scope reads by absolute path; project scope goes through the project root.
+  const imagePath = file.scope === 'computer'
+    ? `/api/fs/content?path=${encodeURIComponent(file.path)}`
+    : `/api/projects/${file.projectId}/files/content?path=${encodeURIComponent(file.path)}`;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

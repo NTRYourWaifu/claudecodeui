@@ -1,4 +1,4 @@
-import { Hand, Code2, Bot, ClipboardList, Zap } from 'lucide-react';
+import { Code2, Hand, Notebook, Unlock, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 /**
@@ -12,54 +12,48 @@ import type { LucideIcon } from 'lucide-react';
 export type PermissionModeDef = {
   id: string;
   label: string;
-  description: string;
   Icon: LucideIcon;
   /** Tailwind colour token for the icon. */
   iconColor: string;
-  /** Colour of the dot shown next to the active mode on the trigger. */
-  dotClass: string;
 };
 
+/**
+ * Labels and order mirror the Claude Code mode switcher, so that someone who
+ * knows the desktop client recognises this list at a glance. The descriptions
+ * that used to sit under each label are gone: they turned every row into two
+ * lines of prose for a choice that is made in a second, and on a phone that
+ * cost most of the panel.
+ */
 export const CLAUDE_PERMISSION_MODES: PermissionModeDef[] = [
   {
     id: 'default',
-    label: 'Ask before edits',
-    description: 'Claude will ask for approval before making each edit',
+    label: 'Manual',
     Icon: Hand,
     iconColor: 'text-orange-500',
-    dotClass: 'bg-muted-foreground',
   },
   {
     id: 'acceptEdits',
     label: 'Edit automatically',
-    description: 'Claude will edit your selected text or the whole file',
     Icon: Code2,
     iconColor: 'text-green-500',
-    dotClass: 'bg-green-500',
-  },
-  {
-    id: 'auto',
-    label: 'Auto (classifier)',
-    description: 'A classifier decides per tool call whether to approve. Hands-off, but safer than Bypass.',
-    Icon: Bot,
-    iconColor: 'text-blue-500',
-    dotClass: 'bg-blue-500',
   },
   {
     id: 'plan',
-    label: 'Plan mode',
-    description: 'Claude will explore the code and present a plan before editing',
-    Icon: ClipboardList,
+    label: 'Plan',
+    Icon: Notebook,
     iconColor: 'text-primary',
-    dotClass: 'bg-primary',
+  },
+  {
+    id: 'auto',
+    label: 'Auto',
+    Icon: Zap,
+    iconColor: 'text-amber-500',
   },
   {
     id: 'bypassPermissions',
     label: 'Bypass permissions',
-    description: 'Claude will not ask for approval before running potentially dangerous commands',
-    Icon: Zap,
-    iconColor: 'text-orange-500',
-    dotClass: 'bg-orange-500',
+    Icon: Unlock,
+    iconColor: 'text-red-500',
   },
 ];
 
@@ -82,8 +76,8 @@ export const ALL_EFFORT_OPTIONS: EffortOption[] = [
   { value: 'low', label: 'Low', hint: 'Minimal thinking, fastest' },
   { value: 'medium', label: 'Medium', hint: 'Moderate thinking' },
   { value: 'high', label: 'High', hint: 'Deep reasoning (default)' },
-  { value: 'xhigh', label: 'XHigh', hint: 'Deeper than high — Opus 5/4.8 only' },
-  { value: 'max', label: 'Max', hint: 'Maximum effort — Opus 5/4.8, Sonnet 5' },
+  { value: 'xhigh', label: 'XHigh', hint: 'Deeper than high' },
+  { value: 'max', label: 'Max', hint: 'Maximum effort' },
 ];
 
 /**
@@ -99,6 +93,31 @@ export function getSupportedEfforts(model: string): Set<string> {
   }
   // Haiku 4.5
   return new Set(['low', 'medium', 'high']);
+}
+
+/**
+ * The effort levels a model actually offers, in order — this is the scale the
+ * slider runs along, so its length changes with the model (5 steps on Opus,
+ * 4 on Sonnet, 3 on Haiku).
+ */
+export function getEffortScale(model: string): EffortOption[] {
+  const supported = getSupportedEfforts(model);
+  return ALL_EFFORT_OPTIONS.filter((option) => supported.has(option.value));
+}
+
+/**
+ * Pull an effort level back onto a model's scale.
+ *
+ * The stored preference is global while the scale is per-model, so switching
+ * Opus (max) → Haiku leaves a value that model cannot serve. That used to be
+ * invisible — the old list simply showed nothing ticked — but a slider has to
+ * point somewhere, and the request would have gone out with an effort the
+ * model rejects either way. Clamps down to the highest level on offer.
+ */
+export function clampEffort(model: string, effort: string): string {
+  const scale = getEffortScale(model);
+  if (scale.some((option) => option.value === effort)) return effort;
+  return scale[scale.length - 1]?.value || 'high';
 }
 
 /** Haiku 4.5 supports extended thinking but not the adaptive variant. */

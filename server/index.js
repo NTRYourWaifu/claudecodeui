@@ -72,6 +72,7 @@ import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import filesystemRoutes from './modules/filesystem/filesystem.routes.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -195,6 +196,10 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
+
+// Machine-wide filesystem routes (protected) - powers the file tree's "computer" scope,
+// which addresses files by absolute path instead of through a project root.
+app.use('/api/fs', authenticateToken, filesystemRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);

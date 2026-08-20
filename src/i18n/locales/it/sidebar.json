@@ -3,6 +3,7 @@
     "title": "Progetti",
     "newProject": "Nuovo progetto",
     "deleteProject": "Rimuovi progetto",
+    "moreActions": "Altre azioni",
     "renameProject": "Rinomina progetto",
     "noProjects": "Nessun progetto trovato",
     "loadingProjects": "Caricamento progetti...",
@@ -32,13 +33,16 @@
     "loadingSessions": "Caricamento sessioni...",
     "unnamed": "Senza nome",
     "loading": "Caricamento...",
-    "showMore": "Mostra più sessioni"
+    "showMore": "Mostra più sessioni",
+    "statusRunning": "In esecuzione",
+    "statusUnread": "Completata, non ancora aperta"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",
     "hideSidebar": "Nascondi barra laterale",
     "createProject": "Crea nuovo progetto",
     "refresh": "Aggiorna progetti e sessioni (Ctrl+R)",
+    "moreActions": "Altre azioni",
     "renameProject": "Rinomina progetto (F2)",
     "deleteProject": "Rimuovi progetto dalla barra laterale (Canc)",
     "addToFavorites": "Aggiungi ai preferiti",

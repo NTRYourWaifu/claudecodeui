@@ -129,6 +129,16 @@
       "refresh": "Refresh",
       "menuLabel": "File context menu",
       "loading": "Loading..."
+    },
+    "quickAccess": "Quick access",
+    "drives": "Drives",
+    "pickFolderFirst": "Pick a folder first",
+    "zipTooLarge": "Folder has more than {{count}} files; download it in smaller pieces",
+    "scope": {
+      "project": "Project",
+      "computer": "This computer",
+      "switchToProject": "Switch back to the project folder",
+      "switchToComputer": "Browse the whole computer"
     }
   },
   "projectWizard": {

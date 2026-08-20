@@ -10,6 +10,9 @@ export type CodeEditorFile = {
   // DB projectId; used by the editor to build `/api/projects/:projectId/file`
   // URLs for reading and saving content.
   projectId?: string;
+  // Set to 'computer' when the file was opened from the file tree's machine scope,
+  // which reads and writes through `/api/fs/*` by absolute path instead.
+  scope?: 'project' | 'computer';
   diffInfo?: CodeEditorDiffInfo | null;
   [key: string]: unknown;
 };

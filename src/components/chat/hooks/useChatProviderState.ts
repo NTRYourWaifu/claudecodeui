@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
 import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
+import { safeLocalStorage } from '../utils/chatStorage';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
+
+const GLOBAL_PERMISSION_KEY = 'permissionMode';
 
 const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
   if (provider === 'codex') {
@@ -14,8 +17,31 @@ const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] 
   return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 };
 
+function defaultPermissionMode(provider: LLMProvider): PermissionMode {
+  const modes = getPermissionModesForProvider(provider);
+  if (provider === 'claude' && modes.includes('auto')) return 'auto';
+  return 'default';
+}
+
+/**
+ * Same shape as effort/thinking: scoped to the conversation, falling back to
+ * the last value the user picked, then to Auto for Claude (Manual for others).
+ * Writing only the scoped key left new conversations unstamped, so the moment
+ * their id appeared they snapped back to Manual and busted the prompt cache.
+ */
+function readStoredPermission(sessionKey: string | null, provider: LLMProvider): PermissionMode {
+  const fallback = defaultPermissionMode(provider);
+  const modes = getPermissionModesForProvider(provider);
+  if (typeof window === 'undefined') return fallback;
+  const scoped = sessionKey ? safeLocalStorage.getItem(`${GLOBAL_PERMISSION_KEY}-${sessionKey}`) : null;
+  const raw = scoped || safeLocalStorage.getItem(GLOBAL_PERMISSION_KEY);
+  if (raw && modes.includes(raw as PermissionMode)) return raw as PermissionMode;
+  return fallback;
+}
+
 interface UseChatProviderStateArgs {
   selectedSession: ProjectSession | null;
+  currentSessionId: string | null;
 }
 
 /**
@@ -35,12 +61,15 @@ function readStoredModel(key: string, options: { value: string }[], fallback: st
   return fallback;
 }
 
-export function useChatProviderState({ selectedSession }: UseChatProviderStateArgs) {
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
+export function useChatProviderState({ selectedSession, currentSessionId }: UseChatProviderStateArgs) {
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
     return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
   });
+  const permissionSessionKey = currentSessionId || selectedSession?.id || null;
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
+    readStoredPermission(permissionSessionKey, provider),
+  );
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return readStoredModel('cursor-model', CURSOR_MODELS.OPTIONS, CURSOR_MODELS.DEFAULT);
   });
@@ -56,15 +85,31 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
 
   const lastProviderRef = useRef(provider);
 
-  useEffect(() => {
-    if (!selectedSession?.id) {
-      return;
-    }
+  const persistPermission = useCallback(
+    (next: PermissionMode) => {
+      safeLocalStorage.setItem(GLOBAL_PERMISSION_KEY, next);
+      if (permissionSessionKey) {
+        safeLocalStorage.setItem(`${GLOBAL_PERMISSION_KEY}-${permissionSessionKey}`, next);
+      }
+    },
+    [permissionSessionKey],
+  );
 
-    const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null;
-    const validModes = getPermissionModesForProvider(provider);
-    setPermissionMode(savedMode && validModes.includes(savedMode) ? savedMode : 'default');
-  }, [selectedSession?.id, provider]);
+  useEffect(() => {
+    const restored = readStoredPermission(permissionSessionKey, provider);
+    setPermissionMode((previous) => (previous === restored ? previous : restored));
+    if (permissionSessionKey && !safeLocalStorage.getItem(`${GLOBAL_PERMISSION_KEY}-${permissionSessionKey}`)) {
+      safeLocalStorage.setItem(`${GLOBAL_PERMISSION_KEY}-${permissionSessionKey}`, restored);
+    }
+  }, [permissionSessionKey, provider]);
+
+  const setPermissionModePersist = useCallback(
+    (next: PermissionMode) => {
+      setPermissionMode(next);
+      persistPermission(next);
+    },
+    [persistPermission],
+  );
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
@@ -117,12 +162,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex];
-    setPermissionMode(nextMode);
-
-    if (selectedSession?.id) {
-      localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
-    }
-  }, [permissionMode, provider, selectedSession?.id]);
+    setPermissionModePersist(nextMode);
+  }, [permissionMode, provider, setPermissionModePersist]);
 
   return {
     provider,
@@ -136,7 +177,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     geminiModel,
     setGeminiModel,
     permissionMode,
-    setPermissionMode,
+    setPermissionMode: setPermissionModePersist,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     cyclePermissionMode,

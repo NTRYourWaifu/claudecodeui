@@ -3,6 +3,7 @@
     "title": "Проекты",
     "newProject": "Новый проект",
     "deleteProject": "Убрать проект",
+    "moreActions": "Другие действия",
     "renameProject": "Переименовать проект",
     "noProjects": "Проекты не найдены",
     "loadingProjects": "Загрузка проектов...",
@@ -32,13 +33,16 @@
     "loadingSessions": "Загрузка сеансов...",
     "unnamed": "Без имени",
     "loading": "Загрузка...",
-    "showMore": "Показать больше сеансов"
+    "showMore": "Показать больше сеансов",
+    "statusRunning": "В работе",
+    "statusUnread": "Завершено, ещё не открыто"
   },
   "tooltips": {
     "viewEnvironments": "Просмотр окружений",
     "hideSidebar": "Скрыть боковую панель",
     "createProject": "Создать новый проект",
     "refresh": "Обновить проекты и сеансы (Ctrl+R)",
+    "moreActions": "Другие действия",
     "renameProject": "Переименовать проект (F2)",
     "deleteProject": "Убрать проект из боковой панели (Delete)",
     "addToFavorites": "Добавить в избранное",

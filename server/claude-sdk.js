@@ -28,6 +28,7 @@ import {
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
+import { broadcastSessionRunState } from './modules/websocket/index.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -257,6 +258,10 @@ function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = nul
     tempDir,
     writer
   });
+
+  // Let every connected client light the sidebar dot, not just the one that
+  // started the run.
+  broadcastSessionRunState(sessionId, 'claude', true);
 }
 
 /**
@@ -265,6 +270,7 @@ function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = nul
  */
 function removeSession(sessionId) {
   activeSessions.delete(sessionId);
+  broadcastSessionRunState(sessionId, 'claude', false);
 }
 
 /**

@@ -2,11 +2,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from '../components/auth/context/AuthContext';
 import { IS_PLATFORM } from '../constants/config';
 
+type WebSocketMessageListener = (message: any) => void;
+
 type WebSocketContextType = {
   ws: WebSocket | null;
   sendMessage: (message: any) => void;
   latestMessage: any | null;
   isConnected: boolean;
+  /**
+   * Delivers every message, unlike latestMessage.
+   *
+   * latestMessage is a single state slot, so two messages arriving in the
+   * same React batch collapse into one and the earlier one is never seen. That
+   * is fine for consumers that only care about the newest value, but it drops
+   * one-off events such as a session starting.
+   */
+  subscribe: (listener: WebSocketMessageListener) => () => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -33,7 +44,25 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const listenersRef = useRef<Set<WebSocketMessageListener>>(new Set());
   const { token } = useAuth();
+
+  const emitToListeners = useCallback((message: any) => {
+    listenersRef.current.forEach((listener) => {
+      try {
+        listener(message);
+      } catch (error) {
+        console.error('WebSocket listener error:', error);
+      }
+    });
+  }, []);
+
+  const subscribe = useCallback((listener: WebSocketMessageListener) => {
+    listenersRef.current.add(listener);
+    return () => {
+      listenersRef.current.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     connect();
@@ -64,7 +93,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         wsRef.current = websocket;
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
-          setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
+          const reconnected = { type: 'websocket-reconnected', timestamp: Date.now() };
+          setLatestMessage(reconnected);
+          emitToListeners(reconnected);
         }
         hasConnectedRef.current = true;
       };
@@ -72,6 +103,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          emitToListeners(data);
           setLatestMessage(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -96,7 +128,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token]); // everytime token changes, we reconnect
+  }, [emitToListeners, token]); // everytime token changes, we reconnect
 
   const sendMessage = useCallback((message: any) => {
     const socket = wsRef.current;
@@ -112,8 +144,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     latestMessage,
-    isConnected
-  }), [sendMessage, latestMessage, isConnected]);
+    isConnected,
+    subscribe
+  }), [sendMessage, latestMessage, isConnected, subscribe]);
 
   return value;
 };

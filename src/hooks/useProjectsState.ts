@@ -830,6 +830,8 @@ export function useProjectsState({
       settingsInitialTab,
       onCloseSettings: () => setShowSettings(false),
       isMobile,
+      isDrawerOpen: sidebarOpen,
+      onCloseDrawer: () => setSidebarOpen(false),
     }),
     [
       handleNewSession,
@@ -847,6 +849,7 @@ export function useProjectsState({
       selectedProject,
       selectedSession,
       showSettings,
+      sidebarOpen,
     ],
   );
 

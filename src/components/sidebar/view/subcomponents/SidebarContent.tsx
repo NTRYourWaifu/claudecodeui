@@ -10,6 +10,7 @@ import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo'
 import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
+import SidebarRecentConversations from './SidebarRecentConversations';
 import { getAllSessions } from '../../utils/utils';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
@@ -210,7 +211,7 @@ export default function SidebarContent({
         t={t}
       />
 
-      <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
+      <ScrollArea hideScrollbar className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
         {showConversationSearch ? (
           isSearching && !hasPartialResults ? (
             <div className="px-4 py-12 text-center md:py-8">
@@ -508,6 +509,21 @@ export default function SidebarContent({
               ))}
             </div>
           )
+        ) : searchMode === 'conversations' ? (
+          // Conversations tab with no active query: a flat, project-labelled
+          // stream of recent sessions instead of a second copy of the project tree.
+          <SidebarRecentConversations
+            projects={projectListProps.projects}
+            selectedSession={projectListProps.selectedSession}
+            currentTime={projectListProps.currentTime}
+            searchFilter={searchFilter}
+            isLoading={isLoading}
+            onSelect={(project, session) => {
+              projectListProps.onProjectSelect(project);
+              projectListProps.onSessionSelect(session, project.projectId);
+            }}
+            t={t}
+          />
         ) : (
           <SidebarProjectList {...projectListProps} />
         )}

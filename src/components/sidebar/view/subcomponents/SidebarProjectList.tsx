@@ -15,6 +15,7 @@ export type SidebarProjectListProps = {
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   expandedProjects: Set<string>;
+  fullyExpandedProjectId: string | null;
   editingProject: string | null;
   editingName: string;
   initialSessionsLoaded: Set<string>;
@@ -30,6 +31,7 @@ export type SidebarProjectListProps = {
   isProjectStarred: (projectName: string) => boolean;
   onEditingNameChange: (value: string) => void;
   onToggleProject: (projectName: string) => void;
+  onSetFullyExpandedProject: (projectId: string | null) => void;
   onProjectSelect: (project: Project) => void;
   onToggleStarProject: (projectName: string) => void;
   onStartEditingProject: (project: Project) => void;
@@ -59,6 +61,7 @@ export default function SidebarProjectList({
   isLoading,
   loadingProgress,
   expandedProjects,
+  fullyExpandedProjectId,
   editingProject,
   editingName,
   initialSessionsLoaded,
@@ -74,6 +77,7 @@ export default function SidebarProjectList({
   isProjectStarred,
   onEditingNameChange,
   onToggleProject,
+  onSetFullyExpandedProject,
   onProjectSelect,
   onToggleStarProject,
   onStartEditingProject,
@@ -123,6 +127,7 @@ export default function SidebarProjectList({
               selectedProject={selectedProject}
               selectedSession={selectedSession}
               isExpanded={expandedProjects.has(project.projectId)}
+              isFullyExpanded={fullyExpandedProjectId === project.projectId}
               isDeleting={deletingProjects.has(project.projectId)}
               isStarred={isProjectStarred(project.projectId)}
               editingProject={editingProject}
@@ -137,6 +142,7 @@ export default function SidebarProjectList({
               mcpServerStatus={mcpServerStatus}
               onEditingNameChange={onEditingNameChange}
               onToggleProject={onToggleProject}
+              onSetFullyExpandedProject={onSetFullyExpandedProject}
               onProjectSelect={onProjectSelect}
               onToggleStarProject={onToggleStarProject}
               onStartEditingProject={onStartEditingProject}

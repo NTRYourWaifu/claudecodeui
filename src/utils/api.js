@@ -215,6 +215,54 @@ export const api = {
       }),
   },
 
+  // Machine-wide filesystem access, addressed by absolute path.
+  // Mirrors the project-scoped file endpoints above so the file tree can swap
+  // between "project" and "computer" scope without changing its UI layer.
+  fs: {
+    roots: ({ refresh = false } = {}) =>
+      authenticatedFetch(`/api/fs/roots${refresh ? '?refresh=true' : ''}`),
+
+    list: (dirPath, options = {}) =>
+      authenticatedFetch(`/api/fs/list?path=${encodeURIComponent(dirPath)}`, options),
+
+    readFile: (filePath) =>
+      authenticatedFetch(`/api/fs/file?path=${encodeURIComponent(filePath)}`),
+
+    readFileBlob: (filePath) =>
+      authenticatedFetch(`/api/fs/content?path=${encodeURIComponent(filePath)}`),
+
+    saveFile: (filePath, content) =>
+      authenticatedFetch('/api/fs/file', {
+        method: 'PUT',
+        body: JSON.stringify({ filePath, content }),
+      }),
+
+    createFile: ({ path, type, name }) =>
+      authenticatedFetch('/api/fs/create', {
+        method: 'POST',
+        body: JSON.stringify({ path, type, name }),
+      }),
+
+    renameFile: ({ oldPath, newName }) =>
+      authenticatedFetch('/api/fs/rename', {
+        method: 'PUT',
+        body: JSON.stringify({ oldPath, newName }),
+      }),
+
+    deleteFile: ({ path, type }) =>
+      authenticatedFetch('/api/fs', {
+        method: 'DELETE',
+        body: JSON.stringify({ path, type }),
+      }),
+
+    uploadFiles: (formData) =>
+      authenticatedFetch('/api/fs/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {}, // Let browser set Content-Type for FormData
+      }),
+  },
+
   // Browse filesystem for project suggestions
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();

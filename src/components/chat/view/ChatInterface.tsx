@@ -62,26 +62,6 @@ function ChatInterface({
   }, []);
 
   const {
-    provider,
-    setProvider,
-    cursorModel,
-    setCursorModel,
-    claudeModel,
-    setClaudeModel,
-    codexModel,
-    setCodexModel,
-    geminiModel,
-    setGeminiModel,
-    permissionMode,
-    setPermissionMode,
-    pendingPermissionRequests,
-    setPendingPermissionRequests,
-    cyclePermissionMode,
-  } = useChatProviderState({
-    selectedSession,
-  });
-
-  const {
     chatMessages,
     addMessage,
     clearMessages,
@@ -127,6 +107,27 @@ function ChatInterface({
     resetStreamingState,
     pendingViewSessionRef,
     sessionStore,
+  });
+
+  const {
+    provider,
+    setProvider,
+    cursorModel,
+    setCursorModel,
+    claudeModel,
+    setClaudeModel,
+    codexModel,
+    setCodexModel,
+    geminiModel,
+    setGeminiModel,
+    permissionMode,
+    setPermissionMode,
+    pendingPermissionRequests,
+    setPendingPermissionRequests,
+    cyclePermissionMode,
+  } = useChatProviderState({
+    selectedSession,
+    currentSessionId,
   });
 
   const {
@@ -360,11 +361,6 @@ function ChatInterface({
           onModeSwitch={cyclePermissionMode}
           onPermissionModeChange={(next) => {
             setPermissionMode(next as typeof permissionMode);
-            if (selectedSession?.id) {
-              try {
-                localStorage.setItem(`permissionMode-${selectedSession.id}`, next);
-              } catch { /* storage unavailable (private mode / quota) — preference is non-critical */ }
-            }
           }}
           thinkingEnabled={thinkingEnabled}
           setThinkingEnabled={setThinkingEnabled}

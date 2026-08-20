@@ -129,6 +129,16 @@
       "refresh": "Aggiorna",
       "menuLabel": "Menu contestuale file",
       "loading": "Caricamento..."
+    },
+    "quickAccess": "Accesso rapido",
+    "drives": "Unità",
+    "pickFolderFirst": "Seleziona prima una cartella",
+    "zipTooLarge": "La cartella contiene più di {{count}} file; scaricala in parti più piccole",
+    "scope": {
+      "project": "Progetto",
+      "computer": "Questo computer",
+      "switchToProject": "Torna alla cartella del progetto",
+      "switchToComputer": "Esplora tutto il computer"
     }
   },
   "projectWizard": {

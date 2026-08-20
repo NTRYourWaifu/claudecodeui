@@ -129,6 +129,16 @@
       "refresh": "Обновить",
       "menuLabel": "Контекстное меню файла",
       "loading": "Загрузка..."
+    },
+    "quickAccess": "Быстрый доступ",
+    "drives": "Диски",
+    "pickFolderFirst": "Сначала выберите папку",
+    "zipTooLarge": "В папке больше {{count}} файлов; скачивайте её частями",
+    "scope": {
+      "project": "Проект",
+      "computer": "Этот компьютер",
+      "switchToProject": "Вернуться к папке проекта",
+      "switchToComputer": "Просмотреть весь компьютер"
     }
   },
   "projectWizard": {

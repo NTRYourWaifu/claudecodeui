@@ -1,14 +1,17 @@
-import { ChevronDown, Eye, FileText, FolderPlus, List, RefreshCw, Search, TableProperties, X } from 'lucide-react';
+import { ChevronDown, Eye, FileText, FolderPlus, HardDrive, List, RefreshCw, Search, TableProperties, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button, Input } from '../../../shared/view/ui';
+import { Button, Input, Tooltip } from '../../../shared/view/ui';
 import { cn } from '../../../lib/utils';
-import type { FileTreeViewMode } from '../types/types';
+import type { FileTreeScope, FileTreeViewMode } from '../types/types';
 
 type FileTreeHeaderProps = {
   viewMode: FileTreeViewMode;
   onViewModeChange: (mode: FileTreeViewMode) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  // Scope switch
+  scope: FileTreeScope;
+  onToggleScope: () => void;
   // Toolbar actions
   onNewFile?: () => void;
   onNewFolder?: () => void;
@@ -24,6 +27,8 @@ export default function FileTreeHeader({
   onViewModeChange,
   searchQuery,
   onSearchQueryChange,
+  scope,
+  onToggleScope,
   onNewFile,
   onNewFolder,
   onRefresh,
@@ -33,11 +38,35 @@ export default function FileTreeHeader({
 }: FileTreeHeaderProps) {
   const { t } = useTranslation();
 
+  const isComputerScope = scope === 'computer';
+  const scopeLabel = isComputerScope
+    ? t('fileTree.scope.computer', 'This computer')
+    : t('fileTree.scope.project', 'Project');
+  const scopeHint = isComputerScope
+    ? t('fileTree.scope.switchToProject', 'Switch back to the project folder')
+    : t('fileTree.scope.switchToComputer', 'Browse the whole computer');
+
   return (
     <div className="space-y-2 border-b border-border px-3 pb-2 pt-3">
       {/* Title and Toolbar */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">{t('fileTree.files')}</h3>
+        {/* The title doubles as the scope switch: tapping it flips between the
+            selected project and machine-wide browsing. */}
+        <Tooltip content={scopeHint} position="bottom">
+          <button
+            type="button"
+            onClick={onToggleScope}
+            aria-label={scopeHint}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium transition-colors hover:bg-accent',
+              isComputerScope ? 'text-primary' : 'text-foreground',
+            )}
+          >
+            {isComputerScope ? <HardDrive className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            <span>{scopeLabel}</span>
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </button>
+        </Tooltip>
         <div className="flex items-center gap-0.5">
           {/* Action buttons */}
           {onNewFile && (

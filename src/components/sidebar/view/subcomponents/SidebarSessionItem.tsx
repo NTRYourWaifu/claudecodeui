@@ -5,8 +5,10 @@ import { Badge, Button } from '../../../../shared/view/ui';
 import { cn } from '../../../../lib/utils';
 import type { Project, ProjectSession, LLMProvider } from '../../../../types/app';
 import type { SessionWithProvider } from '../../types/types';
-import { createSessionViewModel } from '../../utils/utils';
+import { createSessionViewModel, formatCompactSessionAge } from '../../utils/utils';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
+import { useSessionActivity } from '../../../../contexts/SessionActivityContext';
+import SessionActivityDot from './SessionActivityDot';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -30,34 +32,6 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-/**
- * Compact relative time for sidebar rows:
- * <1m, Xm, Xhr, Xd.
- */
-const formatCompactSessionAge = (dateString: string, currentTime: Date): string => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const diffInMinutes = Math.floor(Math.max(0, currentTime.getTime() - date.getTime()) / (1000 * 60));
-  if (diffInMinutes < 1) {
-    return '<1m';
-  }
-
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes}m`;
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours}hr`;
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays}d`;
-};
-
 export default function SidebarSessionItem({
   project,
   session,
@@ -74,9 +48,12 @@ export default function SidebarSessionItem({
   onDeleteSession,
   t,
 }: SidebarSessionItemProps) {
-  const sessionView = createSessionViewModel(session, currentTime, t);
+  const sessionView = createSessionViewModel(session, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactSessionAge(sessionView.sessionTime, currentTime);
+  const { isSessionRunning, hasUnseenResult } = useSessionActivity();
+  const isRunning = isSessionRunning(session.id);
+  const hasUnseen = !isRunning && hasUnseenResult(session.id, sessionView.sessionTime);
 
   // Sessions are owned by a project identified by `projectId` (DB primary key)
   // after the projectName → projectId migration.
@@ -95,20 +72,22 @@ export default function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {sessionView.isActive && (
-        <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-        </div>
-      )}
+      {/* Kept fully inside the row: the session list scrolls, so anything that
+          overflows its left edge gets clipped to a half circle. */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 transform">
+        <SessionActivityDot sessionId={session.id} lastActivity={sessionView.sessionTime} t={t} />
+      </div>
 
       <div className="md:hidden">
         <div
           className={cn(
             'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
             isSelected ? 'bg-primary/5 border-primary/20' : '',
-            !isSelected && sessionView.isActive
-              ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
-              : 'border-border/30',
+            !isSelected && isRunning
+              ? 'border-orange-500/40 bg-orange-50/5 dark:bg-orange-900/5'
+              : !isSelected && hasUnseen
+                ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
+                : 'border-border/30',
           )}
           onClick={selectMobileSession}
         >

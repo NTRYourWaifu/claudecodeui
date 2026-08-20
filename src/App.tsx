@@ -5,6 +5,7 @@ import { AuthProvider, ProtectedRoute } from './components/auth';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { SessionActivityProvider } from './contexts/SessionActivityContext';
 import { PluginsProvider } from './contexts/PluginsContext';
 import AppContent from './components/app/AppContent';
 import i18n from './i18n/config.js';
@@ -15,7 +16,8 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <WebSocketProvider>
-            <PluginsProvider>
+            <SessionActivityProvider>
+              <PluginsProvider>
               <TasksSettingsProvider>
                 <TaskMasterProvider>
                 <ProtectedRoute>
@@ -28,7 +30,8 @@ export default function App() {
                 </ProtectedRoute>
                 </TaskMasterProvider>
               </TasksSettingsProvider>
-            </PluginsProvider>
+              </PluginsProvider>
+            </SessionActivityProvider>
           </WebSocketProvider>
         </AuthProvider>
       </ThemeProvider>

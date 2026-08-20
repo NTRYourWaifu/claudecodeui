@@ -115,6 +115,11 @@ export function useSidebarController({
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  // Second expansion stage. A project is either collapsed, previewing its most
+  // recent sessions, or fully expanded into a taller self-scrolling list. Only
+  // one project can reach the taller stage at a time, mirroring the accordion
+  // semantics of `expandedProjects`.
+  const [fullyExpandedProjectId, setFullyExpandedProjectId] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
@@ -433,6 +438,18 @@ export function useSidebarController({
       }
       return next;
     });
+    // Collapsing a project, or switching to a different one, always drops back
+    // out of the taller stage so re-opening starts from the preview again.
+    setFullyExpandedProjectId(null);
+  }, []);
+
+  const setFullyExpandedProject = useCallback((projectId: string | null) => {
+    setFullyExpandedProjectId(projectId);
+  }, []);
+
+  const collapseAllProjects = useCallback(() => {
+    setExpandedProjects(new Set());
+    setFullyExpandedProjectId(null);
   }, []);
 
   const handleSessionClick = useCallback(
@@ -898,6 +915,7 @@ export function useSidebarController({
   return {
     isSidebarCollapsed,
     expandedProjects,
+    fullyExpandedProjectId,
     editingProject,
     showNewProject,
     editingName,
@@ -919,6 +937,8 @@ export function useSidebarController({
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
     toggleProject,
+    setFullyExpandedProject,
+    collapseAllProjects,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,

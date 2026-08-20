@@ -129,6 +129,16 @@
       "refresh": "更新",
       "menuLabel": "ファイルのコンテキストメニュー",
       "loading": "読み込み中..."
+    },
+    "quickAccess": "クイックアクセス",
+    "drives": "ドライブ",
+    "pickFolderFirst": "先にフォルダを選択してください",
+    "zipTooLarge": "フォルダに {{count}} 件を超えるファイルがあります。分割してダウンロードしてください",
+    "scope": {
+      "project": "プロジェクト",
+      "computer": "このコンピュータ",
+      "switchToProject": "プロジェクトフォルダに戻る",
+      "switchToComputer": "コンピュータ全体を参照"
     }
   },
   "projectWizard": {

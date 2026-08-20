@@ -13,6 +13,7 @@ import { useDropzone } from 'react-dropzone';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { authenticatedFetch } from '../../../utils/api';
+import { clampEffort } from '../constants/composerControls';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import { safeLocalStorage } from '../utils/chatStorage';
 import type {
@@ -100,6 +101,43 @@ const getNotificationSessionSummary = (
   return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
 };
 
+const DEFAULT_EFFORT = 'high';
+const DEFAULT_THINKING = true;
+
+/**
+ * Read the effort level a conversation was last using. Conversations that never
+ * had one fall back to the global key, so a brand new conversation opens on the
+ * level the user picked most recently instead of jumping back to the default.
+ */
+function readStoredEffort(sessionKey: string | null): string {
+  if (typeof window === 'undefined') return DEFAULT_EFFORT;
+  const scoped = sessionKey ? safeLocalStorage.getItem(`claude-effort-${sessionKey}`) : null;
+  return scoped || safeLocalStorage.getItem('claude-effort') || DEFAULT_EFFORT;
+}
+
+function parseThinkingFlag(raw: string | null): boolean | null {
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return null;
+}
+
+function readStoredThinking(sessionKey: string | null): boolean {
+  if (typeof window === 'undefined') return DEFAULT_THINKING;
+  const scoped = sessionKey
+    ? parseThinkingFlag(safeLocalStorage.getItem(`claude-thinking-enabled-${sessionKey}`))
+    : null;
+  if (scoped !== null) return scoped;
+  const global = parseThinkingFlag(safeLocalStorage.getItem('claude-thinking-enabled'));
+  if (global !== null) return global;
+  return DEFAULT_THINKING;
+}
+
+function stampScopedSetting(key: string, value: string) {
+  if (!safeLocalStorage.getItem(key)) {
+    safeLocalStorage.setItem(key, value);
+  }
+}
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -148,21 +186,76 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return safeLocalStorage.getItem('claude-thinking-enabled') === '1';
-  });
-  const [effort, setEffort] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'high';
-    return safeLocalStorage.getItem('claude-effort') || 'high';
-  });
+  /**
+   * Effort and thinking are remembered per conversation. Changing either
+   * mid-conversation changes what the request looks like, so a value carried
+   * over from a different conversation both surprises the user and invalidates
+   * that conversation's prompt cache on the very next turn. The global key
+   * stays as the seed for conversations that never set one.
+   */
+  const composerSessionKey = currentSessionId || selectedSession?.id || null;
 
+  const [thinkingEnabled, setThinkingEnabled] = useState<boolean>(() =>
+    readStoredThinking(composerSessionKey),
+  );
+
+  const [effort, setEffort] = useState<string>(() => readStoredEffort(composerSessionKey));
+
+  useEffect(() => {
+    const restoredEffort = readStoredEffort(composerSessionKey);
+    setEffort((previous) => (previous === restoredEffort ? previous : restoredEffort));
+    if (composerSessionKey) {
+      stampScopedSetting(`claude-effort-${composerSessionKey}`, restoredEffort);
+    }
+    const restoredThinking = readStoredThinking(composerSessionKey);
+    setThinkingEnabled((previous) => (previous === restoredThinking ? previous : restoredThinking));
+    if (composerSessionKey) {
+      stampScopedSetting(`claude-thinking-enabled-${composerSessionKey}`, restoredThinking ? '1' : '0');
+    }
+  }, [composerSessionKey]);
+
+  const persistEffort = useCallback(
+    (next: string) => {
+      safeLocalStorage.setItem('claude-effort', next);
+      if (composerSessionKey) {
+        safeLocalStorage.setItem(`claude-effort-${composerSessionKey}`, next);
+      }
+    },
+    [composerSessionKey],
+  );
+
+  const persistThinking = useCallback(
+    (next: boolean) => {
+      const flag = next ? '1' : '0';
+      safeLocalStorage.setItem('claude-thinking-enabled', flag);
+      if (composerSessionKey) {
+        safeLocalStorage.setItem(`claude-thinking-enabled-${composerSessionKey}`, flag);
+      }
+    },
+    [composerSessionKey],
+  );
+
+  /**
+   * Effort scales are per-model, so switching from Opus (max) to Haiku (three
+   * levels) would otherwise keep sending a level that model rejects. The old
+   * list made this invisible — it simply showed nothing ticked — so pull the
+   * value back onto the scale whenever the model changes, and persist it so the
+   * stored preference agrees with what is sent.
+   */
+  useEffect(() => {
+    const clamped = clampEffort(claudeModel, effort);
+    if (clamped !== effort) {
+      setEffort(clamped);
+      persistEffort(clamped);
+    }
+  }, [claudeModel, effort, persistEffort]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
   const handleSubmitRef = useRef<
     ((event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const isSubmittingRef = useRef(false);
   const selectedProjectId = selectedProject?.projectId;
 
   const handleBuiltInCommand = useCallback(
@@ -520,7 +613,7 @@ export function useChatComposerState({
     noKeyboard: true,
   });
 
-  const handleSubmit = useCallback(
+  const performSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
@@ -765,6 +858,29 @@ export function useChatComposerState({
       thinkingEnabled,
       effort,
     ],
+  );
+
+  // One tap on the send button can reach this up to three times: touchstart,
+  // the simulated mousedown, and the form submit that follows the click.
+  // Without attachments the duplicates bail out because the first run has
+  // already cleared the input, but uploading images awaits a fetch before
+  // that, so the duplicates get past the check and send the message again.
+  const handleSubmit = useCallback(
+    async (
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+    ) => {
+      event.preventDefault();
+      if (isSubmittingRef.current) {
+        return;
+      }
+      isSubmittingRef.current = true;
+      try {
+        await performSubmit(event);
+      } finally {
+        isSubmittingRef.current = false;
+      }
+    },
+    [performSubmit],
   );
 
   useEffect(() => {
@@ -1012,13 +1128,16 @@ export function useChatComposerState({
 
   const setThinkingEnabledPersist = useCallback((next: boolean) => {
     setThinkingEnabled(next);
-    safeLocalStorage.setItem('claude-thinking-enabled', next ? '1' : '0');
-  }, []);
+    persistThinking(next);
+  }, [persistThinking]);
 
-  const setEffortPersist = useCallback((next: string) => {
-    setEffort(next);
-    safeLocalStorage.setItem('claude-effort', next);
-  }, []);
+  const setEffortPersist = useCallback(
+    (next: string) => {
+      setEffort(next);
+      persistEffort(next);
+    },
+    [persistEffort],
+  );
 
   return {
     input,

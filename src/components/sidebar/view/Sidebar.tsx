@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
+import { useHistoryLayers } from '../../../hooks/useHistoryLayers';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
@@ -39,6 +40,8 @@ function Sidebar({
   settingsInitialTab,
   onCloseSettings,
   isMobile,
+  isDrawerOpen,
+  onCloseDrawer,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
@@ -55,6 +58,7 @@ function Sidebar({
   const {
     isSidebarCollapsed,
     expandedProjects,
+    fullyExpandedProjectId,
     editingProject,
     showNewProject,
     editingName,
@@ -80,6 +84,8 @@ function Sidebar({
     archivedSessionsCount,
     isArchivedSessionsLoading,
     toggleProject,
+    setFullyExpandedProject,
+    collapseAllProjects,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -127,6 +133,19 @@ function Sidebar({
     sidebarVisible,
   });
 
+  // Back (the Android system gesture, or the browser button) unwinds the sidebar
+  // one layer at a time before it is allowed to leave the current conversation.
+  // Declared outermost-first; the drawer layer only exists on phones.
+  useHistoryLayers([
+    { id: 'drawer', active: isMobile && isDrawerOpen, close: onCloseDrawer },
+    { id: 'expanded', active: expandedProjects.size > 0, close: collapseAllProjects },
+    {
+      id: 'fully-expanded',
+      active: fullyExpandedProjectId !== null,
+      close: () => setFullyExpandedProject(null),
+    },
+  ]);
+
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -148,6 +167,7 @@ function Sidebar({
     isLoading,
     loadingProgress,
     expandedProjects,
+    fullyExpandedProjectId,
     editingProject,
     editingName,
     initialSessionsLoaded,
@@ -162,6 +182,7 @@ function Sidebar({
     isProjectStarred,
     onEditingNameChange: setEditingName,
     onToggleProject: toggleProject,
+    onSetFullyExpandedProject: setFullyExpandedProject,
     onProjectSelect: handleProjectSelect,
     onToggleStarProject: toggleStarProject,
     onStartEditingProject: startEditing,

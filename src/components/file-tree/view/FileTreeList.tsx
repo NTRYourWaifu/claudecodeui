@@ -52,32 +52,40 @@ export default function FileTreeList({
 }: FileTreeListProps) {
   return (
     <div>
-      {items.map((item) => (
-        <FileTreeNode
-          key={item.path}
-          item={item}
-          level={0}
-          viewMode={viewMode}
-          expandedDirs={expandedDirs}
-          onItemClick={onItemClick}
-          renderFileIcon={renderFileIcon}
-          formatFileSize={formatFileSize}
-          formatRelativeTime={formatRelativeTime}
-          onRename={onRename}
-          onDelete={onDelete}
-          onNewFile={onNewFile}
-          onNewFolder={onNewFolder}
-          onCopyPath={onCopyPath}
-          onDownload={onDownload}
-          onRefresh={onRefresh}
-          renamingItem={renamingItem}
-          renameValue={renameValue}
-          setRenameValue={setRenameValue}
-          handleConfirmRename={handleConfirmRename}
-          handleCancelRename={handleCancelRename}
-          renameInputRef={renameInputRef}
-          operationLoading={operationLoading}
-        />
+      {items.map((item, index) => (
+        <div key={item.path}>
+          {/* Machine scope tags its root entries with a group name so the shortcuts
+              and the drive list read as two sections. Project scope never sets it. */}
+          {item.group && item.group !== items[index - 1]?.group && (
+            <div className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {item.group}
+            </div>
+          )}
+          <FileTreeNode
+            item={item}
+            level={0}
+            viewMode={viewMode}
+            expandedDirs={expandedDirs}
+            onItemClick={onItemClick}
+            renderFileIcon={renderFileIcon}
+            formatFileSize={formatFileSize}
+            formatRelativeTime={formatRelativeTime}
+            onRename={onRename}
+            onDelete={onDelete}
+            onNewFile={onNewFile}
+            onNewFolder={onNewFolder}
+            onCopyPath={onCopyPath}
+            onDownload={onDownload}
+            onRefresh={onRefresh}
+            renamingItem={renamingItem}
+            renameValue={renameValue}
+            setRenameValue={setRenameValue}
+            handleConfirmRename={handleConfirmRename}
+            handleCancelRename={handleCancelRename}
+            renameInputRef={renameInputRef}
+            operationLoading={operationLoading}
+          />
+        </div>
       ))}
     </div>
   );

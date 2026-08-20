@@ -3,6 +3,7 @@
     "title": "Projeler",
     "newProject": "Yeni Proje",
     "deleteProject": "Projeyi Kaldır",
+    "moreActions": "Diğer işlemler",
     "renameProject": "Projeyi Yeniden Adlandır",
     "noProjects": "Proje bulunamadı",
     "loadingProjects": "Projeler yükleniyor...",
@@ -32,13 +33,16 @@
     "loadingSessions": "Oturumlar yükleniyor...",
     "unnamed": "Adsız",
     "loading": "Yükleniyor...",
-    "showMore": "Daha fazla oturum göster"
+    "showMore": "Daha fazla oturum göster",
+    "statusRunning": "Çalışıyor",
+    "statusUnread": "Bitti, henüz açılmadı"
   },
   "tooltips": {
     "viewEnvironments": "Ortamları Görüntüle",
     "hideSidebar": "Kenar çubuğunu gizle",
     "createProject": "Yeni proje oluştur",
     "refresh": "Projeleri ve oturumları yenile (Ctrl+R)",
+    "moreActions": "Diğer işlemler",
     "renameProject": "Projeyi yeniden adlandır (F2)",
     "deleteProject": "Projeyi kenar çubuğundan kaldır (Delete)",
     "addToFavorites": "Favorilere ekle",

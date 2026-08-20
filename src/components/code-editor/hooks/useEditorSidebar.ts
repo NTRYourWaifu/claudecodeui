@@ -22,7 +22,11 @@ export const useEditorSidebar = ({
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
 
   const handleFileOpen = useCallback(
-    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
+    (
+      filePath: string,
+      diffInfo: CodeEditorDiffInfo | null = null,
+      scope: 'project' | 'computer' = 'project',
+    ) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
@@ -32,6 +36,9 @@ export const useEditorSidebar = ({
         // DB projectId is forwarded to the editor so it can read/save files
         // via `/api/projects/:projectId/file` endpoints.
         projectId: selectedProject?.projectId,
+        // Files opened from machine scope live outside any project root, so the
+        // editor has to address them by absolute path instead.
+        scope,
         diffInfo,
       });
     },

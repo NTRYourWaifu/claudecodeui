@@ -3,13 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
+import { useComputerFileTree } from '../hooks/useComputerFileTree';
 import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
 import { useFileTreeData } from '../hooks/useFileTreeData';
 import { useFileTreeOperations } from '../hooks/useFileTreeOperations';
+import { useFileTreeScope } from '../hooks/useFileTreeScope';
 import { useFileTreeSearch } from '../hooks/useFileTreeSearch';
 import { useFileTreeViewMode } from '../hooks/useFileTreeViewMode';
 import { useFileTreeUpload } from '../hooks/useFileTreeUpload';
-import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
+import type { FileTreeImageSelection, FileTreeNode, FileTreeScope } from '../types/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
 import { Project } from '../../../types/app';
 import { ScrollArea, Input } from '../../../shared/view/ui';
@@ -22,7 +24,7 @@ import ImageViewer from './ImageViewer';
 
 type FileTreeProps = {
   selectedProject: Project | null;
-  onFileOpen?: (filePath: string) => void;
+  onFileOpen?: (filePath: string, diffInfo?: null, scope?: FileTreeScope) => void;
 };
 
 export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
@@ -45,7 +47,18 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
+  const { scope, toggleScope } = useFileTreeScope();
+  const isComputerScope = scope === 'computer';
+
+  // Both data sources stay mounted; the inactive one simply holds its last result.
+  // Project scope arrives as one deep tree, machine scope one level at a time.
+  const projectTree = useFileTreeData(isComputerScope ? null : selectedProject);
+  const computerTree = useComputerFileTree(isComputerScope);
+
+  const files = isComputerScope ? computerTree.files : projectTree.files;
+  const loading = isComputerScope ? computerTree.loading : projectTree.loading;
+  const refreshFiles = isComputerScope ? computerTree.refreshFiles : projectTree.refreshFiles;
+
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -58,6 +71,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     selectedProject,
     onRefresh: refreshFiles,
     showToast,
+    scope,
   });
 
   // File upload (drag and drop)
@@ -65,6 +79,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     selectedProject,
     onRefresh: refreshFiles,
     showToast,
+    scope,
   });
 
   // Focus input when creating new item
@@ -92,35 +107,38 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
       if (item.type === 'directory') {
+        // Machine scope loads a directory the first time it is opened; afterwards the
+        // cached listing is reused, and the refresh button is what re-reads it.
+        if (isComputerScope && !computerTree.loadedPaths.has(item.path)) {
+          void computerTree.loadDirectory(item.path);
+        }
         toggleDirectory(item.path);
         return;
       }
 
-      if (isImageFile(item.name) && selectedProject) {
+      if (isImageFile(item.name) && (isComputerScope || selectedProject)) {
         setSelectedImage({
           name: item.name,
           path: item.path,
-          projectPath: selectedProject.path,
+          projectPath: selectedProject?.path,
           // Image URL uses the DB projectId so ImageViewer can hit the
           // /api/projects/:projectId/files/content endpoint directly.
-          projectId: selectedProject.projectId,
+          // Machine scope has no project, so the viewer reads by absolute path.
+          projectId: selectedProject?.projectId ?? '',
+          scope,
         });
         return;
       }
 
-      onFileOpen?.(item.path);
+      onFileOpen?.(item.path, null, scope);
     },
-    [onFileOpen, selectedProject, toggleDirectory],
+    [computerTree, isComputerScope, onFileOpen, scope, selectedProject, toggleDirectory],
   );
 
   const formatRelativeTimeLabel = useCallback(
     (date?: string) => formatRelativeTime(date, t),
     [t],
   );
-
-  if (loading) {
-    return <FileTreeLoadingState />;
-  }
 
   return (
     <div
@@ -146,16 +164,25 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onViewModeChange={changeViewMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onNewFile={() => operations.handleStartCreate('', 'file')}
-        onNewFolder={() => operations.handleStartCreate('', 'directory')}
+        scope={scope}
+        onToggleScope={toggleScope}
+        // Machine scope has no implicit root to create into, so the toolbar's create
+        // buttons are hidden there; the per-folder context menu still offers them.
+        onNewFile={isComputerScope ? undefined : () => operations.handleStartCreate('', 'file')}
+        onNewFolder={isComputerScope ? undefined : () => operations.handleStartCreate('', 'directory')}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
         operationLoading={operations.operationLoading}
       />
 
-      {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
+      {viewMode === 'detailed' && filteredFiles.length > 0 && !loading && <FileTreeDetailedColumns />}
 
+      {/* The loading state replaces only the body, never the header: the scope switch
+          has to stay reachable so a slow or failed machine-scope load is escapable. */}
+      {loading ? (
+        <FileTreeLoadingState />
+      ) : (
       <ScrollArea className="flex-1 px-2 py-1">
         {/* New item input */}
         {operations.isCreating && (
@@ -216,6 +243,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           operationLoading={operations.operationLoading}
         />
       </ScrollArea>
+      )}
 
       {selectedImage && (
         <ImageViewer
