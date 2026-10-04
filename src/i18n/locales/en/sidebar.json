@@ -35,7 +35,9 @@
     "loading": "Loading...",
     "showMore": "Show more sessions",
     "statusRunning": "Working",
-    "statusUnread": "Finished, not opened yet"
+    "statusUnread": "Finished, not opened yet",
+    "subagents_one": "{{count}} subagent",
+    "subagents_other": "{{count}} subagents"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
@@ -72,7 +74,8 @@
     "rename": "Rename",
     "joinCommunity": "Join Community",
     "reportIssue": "Report Issue",
-    "starOnGithub": "Star on GitHub"
+    "starOnGithub": "Star on GitHub",
+    "reloadPage": "Reload page"
   },
   "branding": {
     "openSource": "Open Source"

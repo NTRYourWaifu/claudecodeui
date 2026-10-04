@@ -11,6 +11,7 @@ import type {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 
+import { useWebSocket } from '../../../contexts/WebSocketContext';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { authenticatedFetch } from '../../../utils/api';
 import { clampEffort } from '../constants/composerControls';
@@ -30,6 +31,20 @@ import { type SlashCommand, useSlashCommands } from './useSlashCommands';
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
+};
+
+/**
+ * A message typed while the provider is still working.
+ * - `sending`: handed to the running Claude turn, waiting for the server to
+ *   confirm it was taken in (then it becomes a normal chat bubble)
+ * - `waiting`: sent as its own turn once the current one finishes
+ */
+export type QueuedMessage = {
+  id: string;
+  content: string;
+  images: unknown[];
+  sessionId: string | null;
+  status: 'sending' | 'waiting';
 };
 
 interface UseChatComposerStateArgs {
@@ -102,6 +117,8 @@ const getNotificationSessionSummary = (
 };
 
 const DEFAULT_EFFORT = 'high';
+const EFFORT_SEED_KEY = 'claude-effort-seeded';
+const EFFORT_SEED_VERSION = 'opus-5-5-high';
 const DEFAULT_THINKING = true;
 
 /**
@@ -111,6 +128,12 @@ const DEFAULT_THINKING = true;
  */
 function readStoredEffort(sessionKey: string | null): string {
   if (typeof window === 'undefined') return DEFAULT_EFFORT;
+  // Opus 5.5 became the default alongside an explicit "new conversations start
+  // on high" — reset the global seed once so a stale Max/Low stops leaking in.
+  if (safeLocalStorage.getItem(EFFORT_SEED_KEY) !== EFFORT_SEED_VERSION) {
+    safeLocalStorage.setItem('claude-effort', DEFAULT_EFFORT);
+    safeLocalStorage.setItem(EFFORT_SEED_KEY, EFFORT_SEED_VERSION);
+  }
   const scoped = sessionKey ? safeLocalStorage.getItem(`claude-effort-${sessionKey}`) : null;
   return scoped || safeLocalStorage.getItem('claude-effort') || DEFAULT_EFFORT;
 }
@@ -136,6 +159,28 @@ function stampScopedSetting(key: string, value: string) {
   if (!safeLocalStorage.getItem(key)) {
     safeLocalStorage.setItem(key, value);
   }
+}
+
+/**
+ * Grows the textarea with its text, but never past a share of what is on
+ * screen right now. The old cap was a share of the whole screen (300px on
+ * wide ones), so with the keyboard up, or a phone on its side, the box grew
+ * past the visible area and pushed the line being typed — and the send
+ * button — out of sight. Past the cap the box scrolls, held on the caret's
+ * line when typing at the end.
+ */
+function fitTextareaToScreen(target: HTMLTextAreaElement) {
+  const atEnd = target.selectionEnd === target.value.length;
+  const previousScrollTop = target.scrollTop;
+  const visibleHeight = window.visualViewport?.height ?? window.innerHeight;
+  const maxHeight = Math.max(72, Math.floor(visibleHeight * 0.35));
+
+  target.style.maxHeight = `${maxHeight}px`;
+  target.style.height = 'auto';
+  target.style.height = `${Math.max(22, Math.min(target.scrollHeight, maxHeight))}px`;
+  // Collapsing to `auto` above resets the scroll, which left the newest line
+  // half under the bottom edge.
+  target.scrollTop = atEnd ? target.scrollHeight : previousScrollTop;
 }
 
 export function useChatComposerState({
@@ -186,6 +231,15 @@ export function useChatComposerState({
   const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
+  const { subscribe } = useWebSocket();
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  // Mirrors the state synchronously: the server's confirmation can arrive
+  // before React has re-rendered with the item that was just queued.
+  const queuedMessagesRef = useRef<QueuedMessage[]>([]);
+  const updateQueue = useCallback((update: (previous: QueuedMessage[]) => QueuedMessage[]) => {
+    queuedMessagesRef.current = update(queuedMessagesRef.current);
+    setQueuedMessages(queuedMessagesRef.current);
+  }, []);
   /**
    * Effort and thinking are remembered per conversation. Changing either
    * mid-conversation changes what the request looks like, so a value carried
@@ -613,13 +667,218 @@ export function useChatComposerState({
     noKeyboard: true,
   });
 
+  const uploadAttachedImages = useCallback(async (): Promise<unknown[] | null> => {
+    if (attachedImages.length === 0 || !selectedProject) {
+      return [];
+    }
+      const formData = new FormData();
+      attachedImages.forEach((file) => {
+        formData.append('images', file);
+      });
+
+      try {
+        const response = await authenticatedFetch(`/api/projects/${selectedProject.projectId}/upload-images`, {
+          method: 'POST',
+          headers: {},
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to upload images');
+        }
+
+        const result = await response.json();
+        return result.images as unknown[];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Image upload failed:', error);
+        addMessage({
+          type: 'error',
+          content: `Failed to upload images: ${message}`,
+          timestamp: new Date(),
+        });
+        return null;
+      }
+  }, [attachedImages, selectedProject, addMessage]);
+
+  /**
+   * Hands a message to the provider. With `injectId` the message was typed
+   * while Claude is working: the server feeds it into the running turn, and
+   * its chat bubble is added only once the server confirms (`input-queued`).
+   */
+  const dispatchToProvider = useCallback(
+    (content: string, uploadedImages: unknown[], injectId?: string) => {
+      if (!selectedProject) {
+        return;
+      }
+
+      const effectiveSessionId =
+        currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
+
+      if (!injectId) {
+        const userMessage: ChatMessage = {
+          type: 'user',
+          content,
+          images: uploadedImages as any,
+          timestamp: new Date(),
+        };
+
+        addMessage(userMessage);
+        setIsLoading(true); // Processing banner starts
+        setCanAbortSession(true);
+        setClaudeStatus({
+          text: 'Processing',
+          tokens: 0,
+          can_interrupt: true,
+        });
+
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+
+        if (!effectiveSessionId && !selectedSession?.id) {
+          if (typeof window !== 'undefined') {
+            // Reset stale pending IDs from previous interrupted runs before creating a new one.
+            sessionStorage.removeItem('pendingSessionId');
+          }
+          // For new sessions we intentionally keep this as `null` until the backend
+          // emits `session_created` with the canonical provider session id.
+          pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
+        }
+        if (effectiveSessionId) {
+          onSessionActive?.(effectiveSessionId);
+          onSessionProcessing?.(effectiveSessionId);
+        }
+      }
+
+      const getToolsSettings = () => {
+        try {
+          const settingsKey =
+            provider === 'cursor'
+              ? 'cursor-tools-settings'
+              : provider === 'codex'
+                ? 'codex-settings'
+                : provider === 'gemini'
+                  ? 'gemini-settings'
+                  : 'claude-settings';
+          const savedSettings = safeLocalStorage.getItem(settingsKey);
+          if (savedSettings) {
+            return JSON.parse(savedSettings);
+          }
+        } catch (error) {
+          console.error('Error loading tools settings:', error);
+        }
+
+        return {
+          allowedTools: [],
+          disallowedTools: [],
+          skipPermissions: false,
+        };
+      };
+
+      const toolsSettings = getToolsSettings();
+      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+      const sessionSummary = getNotificationSessionSummary(selectedSession, content);
+
+      if (provider === 'cursor') {
+        sendMessage({
+          type: 'cursor-command',
+          command: content,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: cursorModel,
+            skipPermissions: toolsSettings?.skipPermissions || false,
+            sessionSummary,
+            toolsSettings,
+          },
+        });
+      } else if (provider === 'codex') {
+        sendMessage({
+          type: 'codex-command',
+          command: content,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: codexModel,
+            sessionSummary,
+            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
+          },
+        });
+      } else if (provider === 'gemini') {
+        sendMessage({
+          type: 'gemini-command',
+          command: content,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: geminiModel,
+            sessionSummary,
+            permissionMode,
+            toolsSettings,
+          },
+        });
+      } else {
+        sendMessage({
+          type: 'claude-command',
+          command: content,
+          options: {
+            projectPath: resolvedProjectPath,
+            cwd: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            toolsSettings,
+            permissionMode,
+            model: claudeModel,
+            thinking: thinkingEnabled,
+            effort,
+            sessionSummary,
+            images: uploadedImages,
+            ...(injectId ? { queued: true, clientMessageId: injectId } : {}),
+          },
+        });
+      }
+    },
+    [
+      selectedSession,
+      claudeModel,
+      codexModel,
+      currentSessionId,
+      cursorModel,
+      geminiModel,
+      onSessionActive,
+      onSessionProcessing,
+      pendingViewSessionRef,
+      permissionMode,
+      provider,
+      scrollToBottom,
+      selectedProject,
+      sendMessage,
+      setCanAbortSession,
+      addMessage,
+      setClaudeStatus,
+      setIsLoading,
+      setIsUserScrolledUp,
+      thinkingEnabled,
+      effort,
+    ],
+  );
+
   const performSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      if (!currentInput.trim() || !selectedProject) {
         return;
       }
 
@@ -650,170 +909,41 @@ export function useChatComposerState({
         }
       }
 
-      const messageContent = currentInput;
 
-      let uploadedImages: unknown[] = [];
-      if (attachedImages.length > 0) {
-        const formData = new FormData();
-        attachedImages.forEach((file) => {
-          formData.append('images', file);
-        });
-
-        try {
-          const response = await authenticatedFetch(`/api/projects/${selectedProject.projectId}/upload-images`, {
-            method: 'POST',
-            headers: {},
-            body: formData,
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to upload images');
-          }
-
-          const result = await response.json();
-          uploadedImages = result.images;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Image upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload images: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
+      const uploadedImages = await uploadAttachedImages();
+      if (uploadedImages === null) {
+        return;
       }
 
-      const effectiveSessionId =
-        currentSessionId || selectedSession?.id || sessionStorage.getItem('cursorSessionId');
-
-      const userMessage: ChatMessage = {
-        type: 'user',
-        content: currentInput,
-        images: uploadedImages as any,
-        timestamp: new Date(),
-      };
-
-      addMessage(userMessage);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: 'Processing',
-        tokens: 0,
-        can_interrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
-
-      if (!effectiveSessionId && !selectedSession?.id) {
-        if (typeof window !== 'undefined') {
-          // Reset stale pending IDs from previous interrupted runs before creating a new one.
-          sessionStorage.removeItem('pendingSessionId');
-        }
-        // For new sessions we intentionally keep this as `null` until the backend
-        // emits `session_created` with the canonical provider session id.
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
-      }
-      if (effectiveSessionId) {
-        onSessionActive?.(effectiveSessionId);
-        onSessionProcessing?.(effectiveSessionId);
-      }
-
-      const getToolsSettings = () => {
-        try {
-          const settingsKey =
-            provider === 'cursor'
-              ? 'cursor-tools-settings'
-              : provider === 'codex'
-                ? 'codex-settings'
-                : provider === 'gemini'
-                  ? 'gemini-settings'
-                  : 'claude-settings';
-          const savedSettings = safeLocalStorage.getItem(settingsKey);
-          if (savedSettings) {
-            return JSON.parse(savedSettings);
-          }
-        } catch (error) {
-          console.error('Error loading tools settings:', error);
-        }
-
-        return {
-          allowedTools: [],
-          disallowedTools: [],
-          skipPermissions: false,
-        };
-      };
-
-      const toolsSettings = getToolsSettings();
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
-      if (provider === 'cursor') {
-        sendMessage({
-          type: 'cursor-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: cursorModel,
-            skipPermissions: toolsSettings?.skipPermissions || false,
-            sessionSummary,
-            toolsSettings,
-          },
-        });
-      } else if (provider === 'codex') {
-        sendMessage({
-          type: 'codex-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: codexModel,
-            sessionSummary,
-            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
-          },
-        });
-      } else if (provider === 'gemini') {
-        sendMessage({
-          type: 'gemini-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: geminiModel,
-            sessionSummary,
-            permissionMode,
-            toolsSettings,
-          },
-        });
-      } else {
-        sendMessage({
-          type: 'claude-command',
-          command: messageContent,
-          options: {
-            projectPath: resolvedProjectPath,
-            cwd: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            toolsSettings,
-            permissionMode,
-            model: claudeModel,
-            thinking: thinkingEnabled,
-            effort,
-            sessionSummary,
+      if (isLoading) {
+        // Claude is working: queue instead of dropping the message. Claude takes
+        // it into the running turn; anything else (other providers, slash
+        // commands that need their own turn, or waiting behind an earlier
+        // queued one to keep order) is sent once the turn finishes.
+        const hasWaitingAhead = queuedMessagesRef.current.some(
+          (item) => item.status === 'waiting' && item.sessionId === composerSessionKey,
+        );
+        const canInject =
+          provider === 'claude'
+          && Boolean(composerSessionKey)
+          && !commandInput.startsWith('/')
+          && !hasWaitingAhead;
+        const id = `queued-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        updateQueue((previous) => [
+          ...previous,
+          {
+            id,
+            content: currentInput,
             images: uploadedImages,
+            sessionId: composerSessionKey,
+            status: canInject ? 'sending' : 'waiting',
           },
-        });
+        ]);
+        if (canInject) {
+          dispatchToProvider(currentInput, uploadedImages, id);
+        }
+      } else {
+        dispatchToProvider(currentInput, uploadedImages);
       }
 
       setInput('');
@@ -831,32 +961,16 @@ export function useChatComposerState({
       safeLocalStorage.removeItem(`draft_input_${selectedProject.projectId}`);
     },
     [
-      selectedSession,
-      attachedImages,
-      claudeModel,
-      codexModel,
-      currentSessionId,
-      cursorModel,
+      composerSessionKey,
+      dispatchToProvider,
       executeCommand,
-      geminiModel,
       isLoading,
-      onSessionActive,
-      onSessionProcessing,
-      pendingViewSessionRef,
-      permissionMode,
       provider,
       resetCommandMenuState,
-      scrollToBottom,
       selectedProject,
-      sendMessage,
-      setCanAbortSession,
-      addMessage,
-      setClaudeStatus,
-      setIsLoading,
-      setIsUserScrolledUp,
       slashCommands,
-      thinkingEnabled,
-      effort,
+      updateQueue,
+      uploadAttachedImages,
     ],
   );
 
@@ -886,6 +1000,76 @@ export function useChatComposerState({
   useEffect(() => {
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
+
+  // The server's answer to a message fed into a running turn. Listened to via
+  // subscribe, not latestMessage, because this arrives in the middle of a
+  // stream where a single state slot would drop it.
+  useEffect(
+    () =>
+      subscribe((message: any) => {
+        if (message?.type !== 'input-queued') {
+          return;
+        }
+        const item = queuedMessagesRef.current.find((queued) => queued.id === message.clientMessageId);
+        if (!item) {
+          return;
+        }
+        if (message.accepted) {
+          updateQueue((previous) => previous.filter((queued) => queued.id !== item.id));
+          addMessage({
+            type: 'user',
+            content: item.content,
+            images: item.images as any,
+            timestamp: new Date(),
+          });
+          setIsUserScrolledUp(false);
+          setTimeout(() => scrollToBottom(), 100);
+        } else {
+          // The turn was already wrapping up; send it as the next turn instead.
+          updateQueue((previous) =>
+            previous.map((queued) => (queued.id === item.id ? { ...queued, status: 'waiting' } : queued)),
+          );
+        }
+      }),
+    [subscribe, updateQueue, addMessage, setIsUserScrolledUp, scrollToBottom],
+  );
+
+  // Turn finished (or was stopped): send the next waiting message as a new
+  // turn. One at a time — each queued message is its own turn, and the rest
+  // wait for this one to finish in turn.
+  useEffect(() => {
+    if (isLoading || !selectedProject) {
+      return;
+    }
+    const next = queuedMessagesRef.current.find(
+      (item) => item.status === 'waiting' && (item.sessionId === composerSessionKey || item.sessionId === null),
+    );
+    if (!next) {
+      return;
+    }
+    updateQueue((previous) => previous.filter((item) => item.id !== next.id));
+    dispatchToProvider(next.content, next.images);
+  }, [isLoading, queuedMessages, selectedProject, composerSessionKey, updateQueue, dispatchToProvider]);
+
+  // Tap a waiting message to take it back into the input box for editing.
+  const retrieveQueuedMessage = useCallback(
+    (id: string) => {
+      const item = queuedMessagesRef.current.find((queued) => queued.id === id && queued.status === 'waiting');
+      if (!item) {
+        return;
+      }
+      updateQueue((previous) => previous.filter((queued) => queued.id !== id));
+      const current = inputValueRef.current;
+      const next = current ? `${item.content}\n${current}` : item.content;
+      setInput(next);
+      inputValueRef.current = next;
+    },
+    [updateQueue],
+  );
+
+  const visibleQueuedMessages = queuedMessages.filter(
+    (item) => item.sessionId === composerSessionKey || item.sessionId === null,
+  );
 
   useEffect(() => {
     inputValueRef.current = input;
@@ -919,12 +1103,22 @@ export function useChatComposerState({
       return;
     }
     // Re-run when input changes so restored drafts get the same autosize behavior as typed text.
-    textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${Math.max(22, textareaRef.current.scrollHeight)}px`;
+    fitTextareaToScreen(textareaRef.current);
     const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
     const expanded = textareaRef.current.scrollHeight > lineHeight * 2;
     setIsTextareaExpanded(expanded);
   }, [input]);
+
+  // The keyboard opening shrinks what is on screen without the text changing.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+    const refit = () => {
+      if (textareaRef.current) fitTextareaToScreen(textareaRef.current);
+    };
+    viewport.addEventListener('resize', refit);
+    return () => viewport.removeEventListener('resize', refit);
+  }, []);
 
   useEffect(() => {
     if (!textareaRef.current || input.trim()) {
@@ -1018,8 +1212,7 @@ export function useChatComposerState({
   const handleTextareaInput = useCallback(
     (event: FormEvent<HTMLTextAreaElement>) => {
       const target = event.currentTarget;
-      target.style.height = 'auto';
-      target.style.height = `${Math.max(22, target.scrollHeight)}px`;
+      fitTextareaToScreen(target);
       setCursorPosition(target.selectionStart);
       syncInputOverlayScroll(target);
 
@@ -1140,6 +1333,8 @@ export function useChatComposerState({
   );
 
   return {
+    queuedMessages: visibleQueuedMessages,
+    retrieveQueuedMessage,
     input,
     setInput,
     textareaRef,

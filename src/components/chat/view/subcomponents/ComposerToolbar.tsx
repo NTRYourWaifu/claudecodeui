@@ -249,10 +249,8 @@ export default function ComposerToolbar({
                   role="menuitemradio"
                   aria-checked={selected}
                   onClick={() => {
+                    // setClaudeModel persists both the global seed and this conversation's key.
                     setClaudeModel(option.value);
-                    try {
-                      localStorage.setItem('claude-model', option.value);
-                    } catch { /* storage unavailable (private mode / quota) — preference is non-critical */ }
                   }}
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-accent ${
                     selected ? 'bg-accent/60' : ''

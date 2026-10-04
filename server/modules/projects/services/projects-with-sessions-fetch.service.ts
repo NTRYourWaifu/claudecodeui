@@ -12,6 +12,8 @@ type SessionSummary = {
   summary: string;
   messageCount: number;
   lastActivity: string;
+  /** Subagent runs this session started, shown indented beneath it. */
+  subagents?: SessionSummary[];
 };
 
 type SessionsByProvider = Record<'claude' | 'cursor' | 'codex' | 'gemini', SessionSummary[]>;
@@ -178,9 +180,23 @@ function readProjectSessionsPageByPath(
     pagination.offset,
   ) as SessionRepositoryRow[];
   const total = sessionsDb.countSessionsByProjectPath(projectPath);
+  const sessionsByProvider = bucketSessionRowsByProvider(rows);
+
+  const children = new Map<string, SessionSummary[]>();
+  for (const child of sessionsDb.getChildSessions(rows.map((row) => row.session_id))) {
+    const siblings = children.get(child.parent_session_id as string) ?? [];
+    siblings.push(mapSessionRowToSummary(child));
+    children.set(child.parent_session_id as string, siblings);
+  }
+  for (const summaries of Object.values(sessionsByProvider)) {
+    for (const summary of summaries) {
+      const subagents = children.get(summary.id);
+      if (subagents) summary.subagents = subagents;
+    }
+  }
 
   return {
-    sessionsByProvider: bucketSessionRowsByProvider(rows),
+    sessionsByProvider,
     total,
     hasMore: pagination.offset + rows.length < total,
   };

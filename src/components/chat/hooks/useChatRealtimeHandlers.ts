@@ -5,6 +5,7 @@ import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+import { getThinkingProgress, setThinkingProgress } from '../utils/thinkingProgress';
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -161,6 +162,7 @@ export function useChatRealtimeHandlers({
             setIsLoading(false);
             setCanAbortSession(false);
             setClaudeStatus(null);
+            setThinkingProgress(null);
           }
           return;
         }
@@ -176,6 +178,23 @@ export function useChatRealtimeHandlers({
     /* ---------------------------------------------------------------- */
 
     const sid = msg.sessionId || activeViewSessionId;
+
+    // --- Thinking progress: feeds the live row, never stored ---
+    if (msg.kind === 'status' && (msg.text === 'thinking' || msg.text === 'thinking_end')) {
+      if (sid === activeViewSessionId) {
+        // Timed by this device's clock from the first status of a block, so a
+        // phone whose clock disagrees with the PC still counts from zero.
+        const blockId = Number(msg.thinkingStartedAt) || 0;
+        const previous = getThinkingProgress();
+        setThinkingProgress(msg.text === 'thinking'
+          ? {
+              blockId,
+              startedAt: previous?.blockId === blockId ? previous.startedAt : Date.now(),
+            }
+          : null);
+      }
+      return;
+    }
 
     // --- Streaming: buffer for performance ---
     if (msg.kind === 'stream_delta') {
@@ -263,6 +282,7 @@ export function useChatRealtimeHandlers({
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
+        setThinkingProgress(null);
         setPendingPermissionRequests([]);
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
@@ -333,6 +353,7 @@ export function useChatRealtimeHandlers({
         setIsLoading(false);
         setCanAbortSession(false);
         setClaudeStatus(null);
+        setThinkingProgress(null);
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
         break;

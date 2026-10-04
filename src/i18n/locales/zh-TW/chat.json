@@ -58,7 +58,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "delegated": "主對話指派"
   },
   "tools": {
     "settings": "工具設定",
@@ -185,7 +186,9 @@
     "model": "模型",
     "effort": "思考強度",
     "thinking": "自適應思考",
-    "contextUsage": "已用 context"
+    "contextUsage": "已用 context",
+    "queuedSending": "正在插進這一輪…",
+    "queuedWaiting": "排隊中・這輪結束就送出・點一下拿回來改"
   },
   "thinkingMode": {
     "selector": {
@@ -327,6 +330,13 @@
     "collapse_one": "收起 {{count}} 次工具調用",
     "collapse_other": "收起 {{count}} 次工具調用",
     "failed_one": "{{count}} 個失敗",
-    "failed_other": "{{count}} 個失敗"
+    "failed_other": "{{count}} 個失敗",
+    "process": "過程",
+    "collapseProcess": "收起過程",
+    "thinking": "思考中",
+    "seconds": "{{count}} 秒",
+    "step": "第 {{count}} 次",
+    "working": "處理中",
+    "thinkingTokens": "思考 {{tokens}} token"
   }
 }

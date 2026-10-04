@@ -141,6 +141,9 @@
     height: 100%;
     margin: 0;
     padding: 0;
+    /* No pull-to-refresh: scrolling back through a conversation and hitting
+       the top reloaded the page. The sidebar has a reload button instead. */
+    overscroll-behavior-y: none;
   }
   
   /* Root element with safe area padding for PWA */

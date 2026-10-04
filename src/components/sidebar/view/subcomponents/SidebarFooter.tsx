@@ -1,4 +1,4 @@
-import { Settings, ArrowUpCircle, Bug } from 'lucide-react';
+import { Settings, ArrowUpCircle, Bug, RotateCw } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { IS_PLATFORM } from '../../../../constants/config';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
@@ -139,8 +139,23 @@ export default function SidebarFooter({
         </div>
       )}
 
-      {/* Mobile Report Issue */}
+      {/* Mobile reload. Pull-to-refresh is switched off — it fired whenever a
+          long scroll back through a conversation hit the top — and the
+          installed app has no address bar, so this is the way to reload. */}
       <div className="px-3 pt-3 md:hidden">
+        <button
+          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          onClick={() => window.location.reload()}
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+            <RotateCw className="w-4.5 h-4.5 text-muted-foreground" />
+          </div>
+          <span className="text-base font-medium text-foreground">{t('actions.reloadPage', { defaultValue: 'Reload page' })}</span>
+        </button>
+      </div>
+
+      {/* Mobile Report Issue */}
+      <div className="px-3 pt-2 md:hidden">
         <a
           href={GITHUB_ISSUES_URL}
           target="_blank"

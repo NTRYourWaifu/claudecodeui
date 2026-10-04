@@ -14,13 +14,14 @@ export const CLAUDE_MODELS = {
   // 根據 Anthropic 官方 docs (platform.claude.com/docs/en/about-claude/models/overview)
   // 一律用 versioned ID（官方建議：避免 alias 在新版發佈時自動切換造成行為改變）
   OPTIONS: [
-    { value: "claude-opus-5", label: "Opus 5" },         // 旗艦最新 (1M context, adaptive thinking, $5/$25, 2026-07-24, cutoff 2026-05)
+    { value: "claude-opus-5-5", label: "Opus 5.5" },     // 旗艦最新 (1M context, adaptive thinking, cutoff 2026-06；CLI 自己的預設 effort 是 medium，UI 一律送 high)
+    { value: "claude-opus-5", label: "Opus 5" },         // 旗艦上一代 (1M context, adaptive thinking, $5/$25, 2026-07-24, cutoff 2026-05)
     { value: "claude-opus-4-8", label: "Opus 4.8" },     // 旗艦上一代 (1M context, adaptive thinking, fast mode, $5/$25)
     { value: "claude-sonnet-5", label: "Sonnet 5" },     // 平衡最新 (1M context, ext+adaptive thinking, $3/$15, 2026-06-30)
     { value: "claude-haiku-4-5", label: "Haiku 4.5" },   // 最快 (200k context, extended thinking 無 adaptive, $1/$5)
   ],
 
-  DEFAULT: "claude-opus-5",
+  DEFAULT: "claude-opus-5-5",
 };
 
 /**

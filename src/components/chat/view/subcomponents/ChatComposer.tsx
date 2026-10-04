@@ -14,6 +14,7 @@ import type {
 import { ArrowDownIcon } from 'lucide-react';
 import { getClaudeContextWindow } from '../../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
+import type { QueuedMessage } from '../../hooks/useChatComposerState';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
@@ -106,6 +107,8 @@ interface ChatComposerProps {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  queuedMessages: QueuedMessage[];
+  onRetrieveQueued: (id: string) => void;
 }
 
 export default function ChatComposer({
@@ -167,6 +170,8 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  queuedMessages,
+  onRetrieveQueued,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -254,6 +259,29 @@ export default function ChatComposer({
           isOpen={isCommandMenuOpen}
           frequentCommands={frequentCommands}
         />
+
+        {queuedMessages.length > 0 && (
+          <div className="mb-1.5 flex flex-col gap-1">
+            {queuedMessages.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={item.status !== 'waiting'}
+                onClick={() => onRetrieveQueued(item.id)}
+                className="flex w-full flex-col items-start rounded-xl border border-border/50 bg-muted/40 px-3 py-1.5 text-left transition-colors enabled:hover:bg-accent/50"
+              >
+                <span className="line-clamp-2 w-full whitespace-pre-wrap break-words text-sm text-foreground">
+                  {item.content}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {item.status === 'waiting'
+                    ? t('input.queuedWaiting', { defaultValue: 'Queued · sends when Claude finishes · tap to edit' })
+                    : t('input.queuedSending', { defaultValue: 'Sending into this turn…' })}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <PromptInput
           onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
@@ -357,8 +385,11 @@ export default function ChatComposer({
             >
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
+            {/* Stays a send button while Claude works: the message is queued, not
+                an interrupt. Stopping lives in ClaudeStatus above. */}
             <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
+              status="ready"
+              disabled={!input.trim()}
               className="h-10 w-10 sm:h-10 sm:w-10"
               onMouseDown={(event) => {
                 event.preventDefault();

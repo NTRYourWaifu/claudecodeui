@@ -1,4 +1,4 @@
-# CloudCLI system tray controller.
+﻿# CloudCLI system tray controller.
 #
 # Runs the server as a detached, windowless process and exposes it through a
 # notification-area icon, so the taskbar is not occupied by a console window.
@@ -28,6 +28,12 @@ $LogFile    = Join-Path $LogDir 'server.log'
 $IconPng    = Join-Path $AppRoot 'public\logo-64.png'
 
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
+
+# --- Single instance guard -------------------------------------------------
+# Autostart puts a copy of this script in the Startup folder, so a later manual
+# double-click of tray.bat would otherwise stack a second icon in the tray.
+$script:instanceMutex = New-Object System.Threading.Mutex($false, 'Local\CloudCLITrayIcon')
+if (-not $script:instanceMutex.WaitOne(0, $false)) { exit }
 
 # --- Server process management --------------------------------------------
 
@@ -114,7 +120,9 @@ function Get-TrayIcon {
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $notifyIcon.Icon = Get-TrayIcon
-$notifyIcon.Visible = $true
+# Started by the local service hub (health\總控台): no tray icon, the hub
+# carries this menu instead. The script still runs to look after the server.
+$notifyIcon.Visible = -not $env:LOCAL_SERVICE_HUB
 
 function Update-TrayState {
     if (Test-ServerRunning) {

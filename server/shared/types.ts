@@ -117,6 +117,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** A user row the parent session wrote into a subagent's run. */
+  isDelegated?: boolean;
   images?: unknown;
   toolName?: string;
   toolInput?: unknown;

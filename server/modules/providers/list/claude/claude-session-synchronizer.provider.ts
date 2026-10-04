@@ -16,7 +16,18 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  parentSessionId?: string;
 };
+
+/**
+ * The agent id of a subagent's transcript (`agent-<id>.jsonl`, kept under
+ * `<session>/subagents/`), or null for a session's own. Every line of one
+ * carries the parent's sessionId, so it cannot be told apart by content.
+ */
+function subagentIdOf(filePath: string): string | null {
+  const match = /^agent-([\w-]+)\.jsonl$/.exec(path.basename(filePath));
+  return match ? match[1] : null;
+}
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -24,17 +35,29 @@ type ParsedSession = {
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
   private readonly claudeHome = path.join(os.homedir(), '.claude');
+  private subagentsBackfilled = false;
 
   /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.claudeHome, 'projects'),
-      '.jsonl',
-      since ?? null
-    );
+    const projectsDir = path.join(this.claudeHome, 'projects');
+    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
+
+    // Subagent runs older than the last scan were once indexed as their
+    // parent, so they have no row of their own. Once per process, pick up any
+    // still missing; re-scanning everything instead would also unarchive
+    // every archived session.
+    if (since && !this.subagentsBackfilled) {
+      this.subagentsBackfilled = true;
+      for (const filePath of await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', null)) {
+        const agentId = subagentIdOf(filePath);
+        if (agentId && !sessionsDb.getSessionById(`agent-${agentId}`) && !files.includes(filePath)) {
+          files.push(filePath);
+        }
+      }
+    }
 
     let processed = 0;
     for (const filePath of files) {
@@ -51,7 +74,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        parsed.parentSessionId
       );
       processed += 1;
     }
@@ -81,7 +105,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      parsed.parentSessionId
     );
   }
 
@@ -111,6 +136,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    const agentId = subagentIdOf(filePath);
+    if (agentId) {
+      return {
+        sessionId: `agent-${agentId}`,
+        projectPath: parsed.projectPath,
+        parentSessionId: parsed.sessionId,
+        sessionName: normalizeSessionName(await this.readSubagentDescription(filePath), 'Subagent'),
+      };
+    }
+
     const existingSession = sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
     if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
@@ -129,6 +164,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       ...parsed,
       sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
     };
+  }
+
+  /** The task the parent gave the subagent, kept beside it in `agent-<id>.meta.json`. */
+  private async readSubagentDescription(filePath: string): Promise<string | undefined> {
+    try {
+      const meta = JSON.parse(await readFile(filePath.replace(/\.jsonl$/, '.meta.json'), 'utf8'));
+      return typeof meta.description === 'string' ? meta.description : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async extractSessionAiTitleFromEnd(

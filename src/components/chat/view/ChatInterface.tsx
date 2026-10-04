@@ -176,6 +176,8 @@ function ChatInterface({
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
+    queuedMessages,
+    retrieveQueuedMessage,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -347,6 +349,7 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
+          isLoading={isLoading}
         />
 
         <ChatComposer
@@ -423,6 +426,8 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          queuedMessages={queuedMessages}
+          onRetrieveQueued={retrieveQueuedMessage}
         />
       </div>
 

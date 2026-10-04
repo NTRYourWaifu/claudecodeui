@@ -209,9 +209,8 @@ function mapCliOptionsToSDK(options = {}) {
   // Model logged at query start below
 
   // Effort level (low | medium | high | xhigh | max)
-  if (typeof options.effort === 'string' && options.effort.length > 0) {
-    sdkOptions.effort = options.effort;
-  }
+  // Fall back to high: the CLI's own default for Opus 5.5 is medium.
+  sdkOptions.effort = typeof options.effort === 'string' && options.effort.length > 0 ? options.effort : 'high';
 
   // Thinking toggle. UI 傳 boolean：
   //   true  → 啟用 adaptive thinking（Opus 4.6+ 由模型決定何時思考）
@@ -219,10 +218,19 @@ function mapCliOptionsToSDK(options = {}) {
   // 不能傳 { type: 'disabled' }：舊版 SDK 會 push 成 `--thinking disabled` CLI flag，
   // 新版 Claude Code CLI (v2.1.150) 不認此值會 exit 1。
   if (options.thinking === true) {
-    sdkOptions.thinking = { type: 'adaptive' };
+    // Summarized, as VS Code runs it: left to the CLI default the blocks come
+    // back empty, leaving nothing to read when the working is opened up. The
+    // summary is not billed beyond the thinking itself.
+    sdkOptions.thinking = { type: 'adaptive', display: 'summarized' };
   } else if (options.thinking && typeof options.thinking === 'object' && options.thinking.type !== 'disabled') {
     sdkOptions.thinking = options.thinking;
   }
+
+  // Partial messages are taken only to time the thinking blocks: a block
+  // otherwise arrives whole once it is over, leaving nothing to show while
+  // it runs. The loop below reduces them to a start and an end status and
+  // never forwards the deltas themselves.
+  sdkOptions.includePartialMessages = true;
 
   // Map system prompt configuration
   sdkOptions.systemPrompt = {
@@ -242,21 +250,70 @@ function mapCliOptionsToSDK(options = {}) {
   return sdkOptions;
 }
 
+function createUserInput(text) {
+  return { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null };
+}
+
+/**
+ * Prompt channel for one run, so messages typed while Claude works can be fed
+ * into the run instead of waiting for it to end (streaming input mode).
+ *
+ * Closed on the first `result`: the run then ends as before rather than
+ * keeping a claude process alive per open conversation. A push that loses the
+ * race with close() returns false and the client sends it as a new run.
+ */
+function createInputChannel(firstText) {
+  const pending = [createUserInput(firstText)];
+  const temps = [];
+  let wake = null;
+  let closed = false;
+
+  async function* iterate() {
+    while (true) {
+      while (pending.length > 0) {
+        yield pending.shift();
+      }
+      if (closed) return;
+      await new Promise(resolve => { wake = resolve; });
+      wake = null;
+    }
+  }
+
+  return {
+    iterable: iterate(),
+    temps,
+    push(text, tempFiles = null) {
+      if (closed) return false;
+      pending.push(createUserInput(text));
+      if (tempFiles) temps.push(tempFiles);
+      wake?.();
+      return true;
+    },
+    close() {
+      closed = true;
+      wake?.();
+    }
+  };
+}
+
 /**
  * Adds a session to the active sessions map
  * @param {string} sessionId - Session identifier
  * @param {Object} queryInstance - SDK query instance
  * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
  * @param {string} tempDir - Temp directory for cleanup
+ * @param {Object} input - Input channel of the run, used for mid-run messages
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null, input = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
     tempImagePaths,
     tempDir,
-    writer
+    writer,
+    pushInput: input ? (text, tempFiles) => input.push(text, tempFiles) : null,
+    closeInput: input ? () => input.close() : null
   });
 
   // Let every connected client light the sidebar dot, not just the one that
@@ -295,6 +352,26 @@ function getAllSessions() {
  * @param {Object} sdkMessage - SDK message object
  * @returns {Object} Transformed message ready for WebSocket
  */
+/**
+ * Reduces the stream events of a thinking block to when it started and when
+ * it ended. Nothing in the stream says how many tokens a block has used until
+ * the whole message is over (only its summary streams, and its length ran
+ * anywhere from a quarter to twice the real count), so the live row shows
+ * time alone and the exact count is shown once the turn is folded.
+ */
+function trackThinking(state, event, send) {
+  if (!event) return;
+  if (event.type === 'content_block_start' && event.content_block?.type === 'thinking') {
+    state.startedAt = Date.now();
+    send({ text: 'thinking', thinkingStartedAt: state.startedAt });
+    return;
+  }
+  if (state.startedAt && event.type === 'content_block_stop') {
+    state.startedAt = 0;
+    send({ text: 'thinking_end' });
+  }
+}
+
 function transformMessage(sdkMessage) {
   // Extract parent_tool_use_id for subagent tool grouping
   if (sdkMessage.parent_tool_use_id) {
@@ -414,6 +491,12 @@ async function handleImages(command, images, cwd) {
  * @param {Array<string>} tempImagePaths - Array of temp file paths to delete
  * @param {string} tempDir - Temp directory to remove
  */
+async function cleanupInjectedTemps(inputChannel) {
+  for (const temp of inputChannel?.temps ?? []) {
+    await cleanupTempFiles(temp.tempImagePaths, temp.tempDir);
+  }
+}
+
 async function cleanupTempFiles(tempImagePaths, tempDir) {
   if (!tempImagePaths || tempImagePaths.length === 0) {
     return;
@@ -506,10 +589,41 @@ async function loadMcpConfig(cwd) {
  */
 async function queryClaudeSDK(command, options = {}, ws) {
   const { sessionId, sessionSummary } = options;
+
+  // Message typed while this session is running: feed it into the current run.
+  // Never start a second run for the same session here — if the run is already
+  // wrapping up, say so and let the client resend it once the run completes.
+  if (options.queued) {
+    const session = sessionId ? getSession(sessionId) : null;
+    let accepted = false;
+    if (session?.pushInput) {
+      const imageResult = await handleImages(command, options.images, options.cwd);
+      accepted = session.pushInput(imageResult.modifiedCommand, imageResult);
+      if (!accepted) {
+        await cleanupTempFiles(imageResult.tempImagePaths, imageResult.tempDir);
+      }
+    }
+    ws.send({ type: 'input-queued', clientMessageId: options.clientMessageId, accepted, sessionId: sessionId || null, provider: 'claude' });
+    return;
+  }
+
+  // The client thought the run had ended (e.g. after a reconnect) but it is
+  // still going: feed the message in rather than racing a second run on the
+  // same session. The running loop sends `complete` as usual.
+  const runningSession = sessionId ? getSession(sessionId) : null;
+  if (runningSession?.pushInput) {
+    const imageResult = await handleImages(command, options.images, options.cwd);
+    if (runningSession.pushInput(imageResult.modifiedCommand, imageResult)) {
+      return;
+    }
+    await cleanupTempFiles(imageResult.tempImagePaths, imageResult.tempDir);
+  }
+
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
   let tempDir = null;
+  let inputChannel = null;
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -639,8 +753,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     let queryInstance;
     try {
+      inputChannel = createInputChannel(finalCommand);
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: inputChannel.iterable,
         options: sdkOptions
       });
     } catch (hookError) {
@@ -648,8 +763,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
       // Keep notification behavior operational via runtime events even if hook registration fails.
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
       delete sdkOptions.hooks;
+      inputChannel = createInputChannel(finalCommand);
       queryInstance = query({
-        prompt: finalCommand,
+        prompt: inputChannel.iterable,
         options: sdkOptions
       });
     }
@@ -663,17 +779,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Track the query instance for abort capability
     if (capturedSessionId) {
-      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+      addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws, inputChannel);
     }
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    const thinking = { startedAt: 0 };
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws);
+        addSession(capturedSessionId, queryInstance, tempImagePaths, tempDir, ws, inputChannel);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -689,9 +806,28 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // session_id already captured
       }
 
+      const sid = capturedSessionId || sessionId || null;
+
+      if (message.type === 'stream_event') {
+        // Subagents think too, but the row being fed belongs to the main turn.
+        if (!message.parent_tool_use_id) {
+          trackThinking(thinking, message.event, (status) => {
+            ws.send(createNormalizedMessage({ kind: 'status', ...status, sessionId: sid, provider: 'claude' }));
+          });
+        }
+        continue;
+      }
+
+      // A subagent's own steps. Sent on, they surfaced as the main turn's —
+      // its brief as a user message — and vanished on reload, since the
+      // parent's transcript never holds them. The subagent's run is listed
+      // under this session instead.
+      if (message.parent_tool_use_id) {
+        continue;
+      }
+
 // Transform and normalize message via adapter
       const transformedMessage = transformMessage(message);
-      const sid = capturedSessionId || sessionId || null;
 
       // Use adapter to normalize SDK events into NormalizedMessage[]
       const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
@@ -705,6 +841,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       // Extract and send token budget updates from result messages
       if (message.type === 'result') {
+        // Stop taking mid-run messages. One pushed just before this still runs
+        // as a follow-up turn in this same loop, so it is not lost.
+        inputChannel?.close();
         const models = Object.keys(message.modelUsage || {});
         if (models.length > 0) {
           // Model info available in result message
@@ -723,6 +862,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Clean up temporary image files
     await cleanupTempFiles(tempImagePaths, tempDir);
+    await cleanupInjectedTemps(inputChannel);
 
     // Send completion event
     ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
@@ -744,7 +884,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
     }
 
     // Clean up temporary image files on error
+    inputChannel?.close();
     await cleanupTempFiles(tempImagePaths, tempDir);
+    await cleanupInjectedTemps(inputChannel);
 
     // Check if Claude CLI is installed for a clearer error message
     const installed = await providerAuthService.isProviderInstalled('claude');
@@ -779,6 +921,10 @@ async function abortClaudeSDKSession(sessionId) {
 
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
+
+    // Close the input first so the claude process exits once interrupted
+    // instead of idling for a next message that will never come.
+    session.closeInput?.();
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();

@@ -85,7 +85,7 @@ export const ALL_EFFORT_OPTIONS: EffortOption[] = [
  * Offering an unsupported level would send a request the model rejects.
  */
 export function getSupportedEfforts(model: string): Set<string> {
-  if (model === 'claude-opus-5' || model === 'claude-opus-4-8') {
+  if (model === 'claude-opus-5-5' || model === 'claude-opus-5' || model === 'claude-opus-4-8') {
     return new Set(['low', 'medium', 'high', 'xhigh', 'max']);
   }
   if (model === 'claude-sonnet-5') {

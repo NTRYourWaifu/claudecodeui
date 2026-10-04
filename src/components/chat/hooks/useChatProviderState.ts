@@ -61,6 +61,34 @@ function readStoredModel(key: string, options: { value: string }[], fallback: st
   return fallback;
 }
 
+/**
+ * The global key is whatever the user last clicked, so it pins every device to
+ * the old flagship forever and a new DEFAULT never reaches new conversations.
+ * When DEFAULT changes, overwrite the seed once. Conversations that already
+ * stamped their own model keep it — switching them would rewrite their cache.
+ */
+const CLAUDE_MODEL_SEED_KEY = 'claude-model-seeded-default';
+
+function reseedClaudeModelOnDefaultChange(): void {
+  if (safeLocalStorage.getItem(CLAUDE_MODEL_SEED_KEY) === CLAUDE_MODELS.DEFAULT) return;
+  safeLocalStorage.setItem('claude-model', CLAUDE_MODELS.DEFAULT);
+  safeLocalStorage.setItem(CLAUDE_MODEL_SEED_KEY, CLAUDE_MODELS.DEFAULT);
+}
+
+/**
+ * Claude's model follows the conversation, like effort/thinking/permission.
+ * A global model meant picking Haiku in one conversation silently moved every
+ * other conversation onto Haiku too, and the prompt cache is per model — the
+ * next turn back on the original model had to rewrite the whole history.
+ */
+function readStoredClaudeModel(sessionKey: string | null): string {
+  reseedClaudeModelOnDefaultChange();
+  const isKnown = (value: string | null) => !!value && CLAUDE_MODELS.OPTIONS.some((o) => o.value === value);
+  const scoped = sessionKey ? safeLocalStorage.getItem(`claude-model-${sessionKey}`) : null;
+  if (isKnown(scoped)) return scoped as string;
+  return readStoredModel('claude-model', CLAUDE_MODELS.OPTIONS, CLAUDE_MODELS.DEFAULT);
+}
+
 export function useChatProviderState({ selectedSession, currentSessionId }: UseChatProviderStateArgs) {
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
@@ -73,9 +101,7 @@ export function useChatProviderState({ selectedSession, currentSessionId }: UseC
   const [cursorModel, setCursorModel] = useState<string>(() => {
     return readStoredModel('cursor-model', CURSOR_MODELS.OPTIONS, CURSOR_MODELS.DEFAULT);
   });
-  const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return readStoredModel('claude-model', CLAUDE_MODELS.OPTIONS, CLAUDE_MODELS.DEFAULT);
-  });
+  const [claudeModel, setClaudeModelState] = useState<string>(() => readStoredClaudeModel(permissionSessionKey));
   const [codexModel, setCodexModel] = useState<string>(() => {
     return readStoredModel('codex-model', CODEX_MODELS.OPTIONS, CODEX_MODELS.DEFAULT);
   });
@@ -102,6 +128,26 @@ export function useChatProviderState({ selectedSession, currentSessionId }: UseC
       safeLocalStorage.setItem(`${GLOBAL_PERMISSION_KEY}-${permissionSessionKey}`, restored);
     }
   }, [permissionSessionKey, provider]);
+
+  useEffect(() => {
+    const restored = readStoredClaudeModel(permissionSessionKey);
+    setClaudeModelState((previous) => (previous === restored ? previous : restored));
+    if (permissionSessionKey && !safeLocalStorage.getItem(`claude-model-${permissionSessionKey}`)) {
+      safeLocalStorage.setItem(`claude-model-${permissionSessionKey}`, restored);
+    }
+  }, [permissionSessionKey]);
+
+  // The global key only seeds conversations that never picked a model.
+  const setClaudeModel = useCallback(
+    (next: string) => {
+      setClaudeModelState(next);
+      safeLocalStorage.setItem('claude-model', next);
+      if (permissionSessionKey) {
+        safeLocalStorage.setItem(`claude-model-${permissionSessionKey}`, next);
+      }
+    },
+    [permissionSessionKey],
+  );
 
   const setPermissionModePersist = useCallback(
     (next: PermissionMode) => {

@@ -35,7 +35,9 @@
     "loading": "載入中...",
     "showMore": "顯示更多對話",
     "statusRunning": "工作中",
-    "statusUnread": "已完成，尚未查看"
+    "statusUnread": "已完成，尚未查看",
+    "subagents_one": "{{count}} 個子代理",
+    "subagents_other": "{{count}} 個子代理"
   },
   "tooltips": {
     "viewEnvironments": "檢視環境",
@@ -72,7 +74,8 @@
     "rename": "重新命名",
     "joinCommunity": "加入社群",
     "reportIssue": "回報問題",
-    "starOnGithub": "在 GitHub 上加星號"
+    "starOnGithub": "在 GitHub 上加星號",
+    "reloadPage": "重新整理頁面"
   },
   "branding": {
     "openSource": "開源"

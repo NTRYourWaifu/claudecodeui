@@ -522,6 +522,10 @@ export default function SidebarContent({
               projectListProps.onProjectSelect(project);
               projectListProps.onSessionSelect(session, project.projectId);
             }}
+            onNewSession={(project) => {
+              projectListProps.onProjectSelect(project);
+              projectListProps.onNewSession(project);
+            }}
             t={t}
           />
         ) : (

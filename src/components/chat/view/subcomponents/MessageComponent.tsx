@@ -114,9 +114,21 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
     <div
       ref={messageRef}
       data-message-timestamp={message.timestamp || undefined}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' && !message.isDelegated ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
-      {message.type === 'user' ? (
+      {message.type === 'user' && message.isDelegated ? (
+        /* A brief the main conversation handed a subagent: on the left and
+           grey, so it is never taken for something the user typed. */
+        <div className="w-full rounded-lg border border-border/50 bg-muted/40 px-3 py-1.5 text-muted-foreground sm:max-w-[85%]">
+          <div className="mb-0.5 text-[11px] font-medium text-muted-foreground/80">
+            {t('messageTypes.delegated')}
+          </div>
+          <div className="whitespace-pre-wrap break-words text-sm">
+            {message.content}
+          </div>
+          <div className="mt-0.5 text-right text-[11px] text-muted-foreground/60">{formattedTime}</div>
+        </div>
+      ) : message.type === 'user' ? (
         /* User message bubble on the right */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="group flex-1 rounded-lg rounded-br-sm bg-primary px-3 py-1.5 text-primary-foreground shadow-sm sm:flex-initial sm:px-3.5">

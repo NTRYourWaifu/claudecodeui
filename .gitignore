@@ -143,3 +143,7 @@ tasks/
 # Git worktrees
 .worktrees/
 .playwright-mcp/
+
+# 待辦管理文件（待辦看板自己有備份，不進版控）
+docs/待辦.yaml
+docs/待辦總表.md

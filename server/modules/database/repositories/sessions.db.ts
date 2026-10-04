@@ -11,12 +11,18 @@ type SessionRow = {
   isArchived: number;
   created_at: string;
   updated_at: string;
+  parent_session_id?: string | null;
 };
 
 type SessionMetadataLookupRow = Pick<
   SessionRow,
   'session_id' | 'provider' | 'project_path' | 'jsonl_path' | 'custom_name' | 'isArchived' | 'created_at' | 'updated_at'
 >;
+
+// A subagent run is listed under its parent, unless the parent was never
+// indexed — then it would be unreachable, so it stands on its own.
+const TOP_LEVEL_SQL = `(parent_session_id IS NULL
+    OR NOT EXISTS (SELECT 1 FROM sessions AS parent WHERE parent.session_id = sessions.parent_session_id))`;
 
 function normalizeTimestamp(value?: string): string | null {
   if (!value) return null;
@@ -42,7 +48,8 @@ export const sessionsDb = {
     customName?: string,
     createdAt?: string,
     updatedAt?: string,
-    jsonlPath?: string | null
+    jsonlPath?: string | null,
+    parentSessionId?: string | null
   ): string {
     const db = getConnection();
     const createdAtValue = normalizeTimestamp(createdAt);
@@ -54,10 +61,11 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (session_id, provider, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at, parent_session_id)
+       VALUES (?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP), ?)
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
+         parent_session_id = excluded.parent_session_id,
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
@@ -70,7 +78,8 @@ export const sessionsDb = {
       normalizedProjectPath,
       jsonlPath ?? null,
       createdAtValue,
-      updatedAtValue
+      updatedAtValue,
+      parentSessionId ?? null
     );
 
     return sessionId;
@@ -165,10 +174,30 @@ export const sessionsDb = {
          FROM sessions
          WHERE project_path = ?
            AND isArchived = 0
+           AND ${TOP_LEVEL_SQL}
          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
          LIMIT ? OFFSET ?`
       )
       .all(normalizedProjectPath, limit, offset) as SessionRow[];
+  },
+
+  /**
+   * Subagent runs of the given sessions, oldest first so they read in the
+   * order the parent started them.
+   */
+  getChildSessions(parentSessionIds: string[]): SessionRow[] {
+    if (parentSessionIds.length === 0) return [];
+    const db = getConnection();
+    const placeholders = parentSessionIds.map(() => '?').join(', ');
+    return db
+      .prepare(
+        `SELECT session_id, provider, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at, parent_session_id
+         FROM sessions
+         WHERE parent_session_id IN (${placeholders})
+           AND isArchived = 0
+         ORDER BY datetime(COALESCE(created_at, updated_at)) ASC, session_id ASC`
+      )
+      .all(...parentSessionIds) as SessionRow[];
   },
 
   countSessionsByProjectPath(projectPath: string): number {
@@ -179,7 +208,8 @@ export const sessionsDb = {
         `SELECT COUNT(*) AS count
          FROM sessions
          WHERE project_path = ?
-           AND isArchived = 0`
+           AND isArchived = 0
+           AND ${TOP_LEVEL_SQL}`
       )
       .get(normalizedProjectPath) as { count: number } | undefined;
 

@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { Database } from 'better-sqlite3';
 
 import {
@@ -401,6 +404,40 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+/**
+ * Subagent transcripts (`<session>/subagents/agent-<id>.jsonl`) carry their
+ * parent's sessionId on every line, so indexing one used to overwrite the
+ * parent's row: the parent then opened onto the subagent's run, its brief
+ * shown as if the user had typed it. They now get rows of their own pointing
+ * at the parent; rows already overwritten go back to the parent's own file,
+ * or, where there is none, are dropped to be re-indexed as subagents.
+ */
+function separateSubagentSessions(db: Database) {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'parent_session_id', 'TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id)');
+
+  const hijacked = db
+    .prepare(
+      `SELECT session_id, jsonl_path FROM sessions
+       WHERE parent_session_id IS NULL AND session_id NOT LIKE 'agent-%'
+         AND (jsonl_path LIKE '%subagents%' OR jsonl_path LIKE '%agent-%.jsonl')`
+    )
+    .all() as { session_id: string; jsonl_path: string }[];
+
+  for (const row of hijacked) {
+    const projectDir = path.dirname(row.jsonl_path).replace(/[\\/]+[^\\/]+[\\/]+subagents$/, '');
+    const ownFile = path.join(projectDir, `${row.session_id}.jsonl`);
+    if (fs.existsSync(ownFile)) {
+      console.log(`Running migration: Restoring transcript of session ${row.session_id}`);
+      db.prepare('UPDATE sessions SET jsonl_path = ? WHERE session_id = ?').run(ownFile, row.session_id);
+    } else {
+      console.log(`Running migration: Dropping subagent-only session row ${row.session_id}`);
+      db.prepare('DELETE FROM sessions WHERE session_id = ?').run(row.session_id);
+    }
+  }
+}
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -427,6 +464,7 @@ export const runMigrations = (db: Database) => {
 
     migrateLegacyWorkspaceTableIntoProjects(db);
     rebuildSessionsTableWithProjectSchema(db);
+    separateSubagentSessions(db);
     migrateLegacySessionNames(db);
     ensureProjectsForSessionPaths(db);
 

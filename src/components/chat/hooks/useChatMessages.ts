@@ -3,6 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
+import { IMAGE_PATHS_NOTE } from '../../../stores/useSessionStore';
 import type { NormalizedMessage } from '../../../stores/useSessionStore';
 import type { ChatMessage, SubagentChildTool } from '../types/types';
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
@@ -44,22 +45,31 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
         if (msg.role === 'user') {
           // Parse task notifications
-          const taskNotifRegex = /<task-notification>\s*<task-id>[^<]*<\/task-id>\s*<output-file>[^<]*<\/output-file>\s*<status>([^<]*)<\/status>\s*<summary>([^<]*)<\/summary>\s*<\/task-notification>/g;
-          const taskNotifMatch = taskNotifRegex.exec(content);
-          if (taskNotifMatch) {
+          // Fields are read one by one: newer CLIs add <tool-use-id>, and a
+          // pattern pinned to the old field order let those through as the
+          // user's own words.
+          const isTaskNotification = /^\s*<task-notification>/.test(content);
+          if (isTaskNotification) {
+            const field = (tag: string) => new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(content)?.[1]?.trim();
             converted.push({
               type: 'assistant',
-              content: taskNotifMatch[2]?.trim() || 'Background task finished',
+              content: field('summary') || 'Background task finished',
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotifMatch[1]?.trim() || 'completed',
+              taskStatus: field('status') || 'completed',
               ...sharedMetadata,
             });
           } else {
+            // The temp paths the server lists for attached images mean nothing
+            // to the reader; say how many there were instead.
+            const imageCount = (IMAGE_PATHS_NOTE.exec(content)?.[0].match(/^\s*\d+\.\s/gm) || []).length;
+            const typed = content.replace(IMAGE_PATHS_NOTE, '');
+            const shown = imageCount > 0 ? `${typed}\n\n📎 ${imageCount} 張圖片` : content;
             converted.push({
               type: 'user',
-              content: unescapeWithMathProtection(decodeHtmlEntities(content)),
+              content: unescapeWithMathProtection(decodeHtmlEntities(shown)),
               timestamp: msg.timestamp,
+              isDelegated: msg.isDelegated,
               ...sharedMetadata,
             });
           }
@@ -132,6 +142,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: unescapeWithMathProtection(msg.content),
             timestamp: msg.timestamp,
             isThinking: true,
+            thinkingTokens: msg.tokens,
             ...sharedMetadata,
           });
         }

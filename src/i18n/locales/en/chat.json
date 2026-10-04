@@ -47,7 +47,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "gemini": "Gemini"
+    "gemini": "Gemini",
+    "delegated": "From the main conversation"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -174,7 +175,9 @@
     "model": "Model",
     "effort": "Effort",
     "thinking": "Adaptive thinking",
-    "contextUsage": "Context used"
+    "contextUsage": "Context used",
+    "queuedSending": "Sending into this turn…",
+    "queuedWaiting": "Queued · sends when Claude finishes · tap to edit"
   },
   "thinkingMode": {
     "selector": {
@@ -316,6 +319,13 @@
     "collapse_one": "Hide {{count}} tool call",
     "collapse_other": "Hide {{count}} tool calls",
     "failed_one": "{{count}} failed",
-    "failed_other": "{{count}} failed"
+    "failed_other": "{{count}} failed",
+    "process": "Working notes",
+    "collapseProcess": "Hide working notes",
+    "thinking": "Thinking",
+    "seconds": "{{count}}s",
+    "step": "#{{count}}",
+    "working": "Working",
+    "thinkingTokens": "thought {{tokens}} tokens"
   }
 }

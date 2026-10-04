@@ -6,6 +6,7 @@ import type { Project, ProjectSession, LLMProvider } from '../../../../types/app
 import type { SessionWithProvider } from '../../types/types';
 
 import SidebarSessionItem from './SidebarSessionItem';
+import SidebarSubagentRows from './SidebarSubagentRows';
 
 /**
  * Must stay above `PREVIEW_ROWS` so the preview stage always has more rows than
@@ -245,6 +246,16 @@ export default function SidebarProjectSessions({
                   onProjectSelect={onProjectSelect}
                   onSessionSelect={onSessionSelect}
                   onDeleteSession={onDeleteSession}
+                  t={t}
+                />
+                <SidebarSubagentRows
+                  parent={session}
+                  selectedSession={selectedSession}
+                  currentTime={currentTime}
+                  onSelect={(child) => {
+                    onProjectSelect(project);
+                    onSessionSelect(child, project.projectId);
+                  }}
                   t={t}
                 />
               </div>

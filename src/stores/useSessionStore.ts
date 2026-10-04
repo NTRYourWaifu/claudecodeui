@@ -54,6 +54,8 @@ export interface NormalizedMessage {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** A user row the parent session wrote into a subagent's run. */
+  isDelegated?: boolean;
   images?: string[];
   toolName?: string;
   toolInput?: unknown;
@@ -122,9 +124,16 @@ function createEmptySlot(): SessionSlot {
  * assistant echo (same trimmed text), so finalized stream rows do not stack
  * on top of the persisted copy before realtime is cleared.
  */
+/**
+ * The server appends where it saved attached images to the prompt it sends,
+ * so the stored copy never matched the text the user typed and both bubbles
+ * stayed on screen.
+ */
+export const IMAGE_PATHS_NOTE = /\n*\[Images provided at the following paths:\][\s\S]*$/;
+
 function userTextFingerprint(m: NormalizedMessage): string | null {
   if (m.kind !== 'text' || m.role !== 'user') return null;
-  const t = (m.content || '').trim();
+  const t = (m.content || '').replace(IMAGE_PATHS_NOTE, '').trim();
   return t.length > 0 ? t : null;
 }
 
@@ -405,12 +414,22 @@ export function useSessionStore() {
       const response = await authenticatedFetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      const olderMessages: NormalizedMessage[] = data.messages || [];
+      const page: NormalizedMessage[] = data.messages || [];
+
+      // The offset counts back from the end of the transcript, so anything
+      // written since the last page (a turn still running in VS Code) shifts
+      // this page forward onto rows already on screen. Those came back as a
+      // second copy of the same exchange; drop the ones already held.
+      const knownIds = new Set(slot.serverMessages.map((m) => m.id));
+      const olderMessages = page.filter((m) => !knownIds.has(m.id));
 
       // Prepend older messages (they're earlier in the conversation)
       slot.serverMessages = [...olderMessages, ...slot.serverMessages];
       slot.hasMore = Boolean(data.hasMore);
-      slot.offset = slot.offset + olderMessages.length;
+      slot.total = data.total ?? slot.total;
+      // Measured against the transcript as it stands now, the page just taken
+      // ends `offset + page.length` rows from the end, whatever overlapped.
+      slot.offset = slot.offset + page.length;
       recomputeMergedIfNeeded(slot);
       notify(resolvedSessionId);
       return slot;

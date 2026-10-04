@@ -119,6 +119,9 @@ async function getSessionMessages(
 
     const messages: AnyRecord[] = [];
     const agentToolsCache = new Map<string, AnyRecord[]>();
+    // A subagent's run is a file of its own, but every line in it carries the
+    // parent's sessionId rather than the `agent-<id>` it is listed under.
+    const isSubagentRun = path.basename(jsonLPath).startsWith('agent-');
 
     const fileStream = fs.createReadStream(jsonLPath);
     const rl = readline.createInterface({
@@ -133,7 +136,7 @@ async function getSessionMessages(
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
-        if (entry.sessionId === sessionId) {
+        if (isSubagentRun || entry.sessionId === sessionId) {
           messages.push(entry);
         }
       } catch {
@@ -292,6 +295,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
    * message shape consumed by REST and WebSocket clients.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+    const messages = this.normalizeEntry(rawMessage, sessionId);
+    // In a subagent's transcript the "user" rows were written by the parent
+    // session — the brief it was handed — not by anyone at the keyboard.
+    if (readObjectRecord(rawMessage)?.isSidechain === true) {
+      for (const message of messages) {
+        if (message.kind === 'text' && message.role === 'user') message.isDelegated = true;
+      }
+    }
+    return messages;
+  }
+
+  private normalizeEntry(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
@@ -308,7 +323,50 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
 
-    if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
+    // A message typed while Claude was working and taken in mid-turn is stored
+    // as a `queued_command` attachment rather than as a user row.
+    if (raw.type === 'attachment' && raw.attachment?.type === 'queued_command') {
+      const prompt = raw.attachment.prompt;
+      const text = typeof prompt === 'string'
+        ? prompt
+        : Array.isArray(prompt)
+          ? prompt.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => part.text).join('\n')
+          : '';
+      if (!text.trim()) {
+        return [];
+      }
+      // The same queue carries the harness's own notes — a background command
+      // finishing arrives as commandMode `task-notification`. Only `prompt` is
+      // something the user typed; the rest were shown as their messages.
+      const commandMode = raw.attachment.commandMode;
+      if (commandMode && commandMode !== 'prompt') {
+        if (commandMode !== 'task-notification') {
+          return [];
+        }
+        const field = (tag: string) => new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1]?.trim();
+        return [createNormalizedMessage({
+          id: baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'task_notification',
+          summary: field('summary') || 'Background task update',
+          status: field('status') || 'completed',
+        })];
+      }
+      return [createNormalizedMessage({
+        id: baseId,
+        sessionId,
+        timestamp: ts,
+        provider: PROVIDER,
+        kind: 'text',
+        role: 'user',
+        content: text,
+      })];
+    }
+
+    // Injected rows (skill bodies, etc.) are `isMeta` in JSONL but `isSynthetic` in the live SDK stream.
+    if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true && raw.isSynthetic !== true) {
       if (Array.isArray(raw.message.content)) {
         for (let partIndex = 0; partIndex < raw.message.content.length; partIndex++) {
           const part = raw.message.content[partIndex];
@@ -523,6 +581,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               provider: PROVIDER,
               kind: 'thinking',
               content: part.thinking,
+              // Exact, unlike anything available while the block streams.
+              tokens: raw.message?.usage?.output_tokens_details?.thinking_tokens,
             }));
           }
           partIndex++;

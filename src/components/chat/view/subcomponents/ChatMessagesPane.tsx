@@ -52,6 +52,7 @@ interface ChatMessagesPaneProps {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
+  isLoading?: boolean;
 }
 
 export default function ChatMessagesPane({
@@ -97,32 +98,84 @@ export default function ChatMessagesPane({
   showRawParameters,
   showThinking,
   selectedProject,
+  isLoading = false,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const allocatedKeysRef = useRef<Set<string>>(new Set());
   const generatedMessageKeyCounterRef = useRef(0);
 
-  // Consecutive tool calls, gathered so a run of them can be shown as one row.
+  // Each turn's way to its answer — tool calls, thinking, the notes written in
+  // between — gathered so it can be shown as one row, leaving the request and
+  // the answer on screen.
   //
   // Grouping is purely presentational and deliberately stops here rather than
   // reshaping the message list: the scroll anchoring and pagination both count
   // on the messages staying as they are.
   const toolRuns = useMemo(() => {
-    const runs: { grouped: boolean; messages: ChatMessage[] }[] = [];
+    type Run = { grouped: boolean; live: boolean; messages: ChatMessage[] };
+    const runs: Run[] = [];
+
+    const isReply = (message: ChatMessage) =>
+      message.type === 'assistant'
+      && !message.isToolUse
+      && !message.isThinking
+      && !message.isTaskNotification
+      && !message.isInteractivePrompt
+      && !message.isCompactSummary;
+
+    const addTurn = (turn: ChatMessage[], isLastTurn: boolean) => {
+      // The answer is the run of plain replies the turn ends on; what came
+      // before it is the working. A turn still running ends on whatever it
+      // last wrote, which stays out until the next step folds it in.
+      let answerStart = turn.length;
+      while (answerStart > 0 && isReply(turn[answerStart - 1])) answerStart -= 1;
+
+      const turnRuns: Run[] = [];
+      let group: Run | null = null;
+      turn.forEach((message, index) => {
+        // A background task reporting in mid-turn is part of the working too;
+        // left out, it split the turn's one row into two.
+        const foldable = index < answerStart
+          && (message.isToolUse || message.isThinking || message.isTaskNotification || isReply(message));
+        if (!foldable) {
+          group = null;
+          turnRuns.push({ grouped: false, live: false, messages: [message] });
+          return;
+        }
+        if (!group) {
+          group = { grouped: true, live: false, messages: [] };
+          turnRuns.push(group);
+        }
+        group.messages.push(message);
+      });
+
+      const live = isLastTurn && isLoading;
+      if (live) {
+        const lastGroup = [...turnRuns].reverse().find((run) => run.grouped);
+        if (lastGroup) {
+          lastGroup.live = true;
+        } else {
+          // Nothing to fold yet, but the turn is already thinking: the row
+          // goes where the working will be.
+          const at = turnRuns.length > 0 && turnRuns[0].messages[0]?.type === 'user' ? 1 : 0;
+          turnRuns.splice(at, 0, { grouped: true, live: true, messages: [] });
+        }
+      }
+      runs.push(...turnRuns);
+    };
+
+    let turn: ChatMessage[] = [];
     for (const message of visibleMessages) {
-      // Errors group too. Keeping them out fragmented a run into pieces around
-      // every failure, which cost more room than it saved; the summary row
-      // carries the failure instead, so it is still on screen without the call
-      // that produced it being separated from the ones around it.
-      const groupable = Boolean(message.isToolUse);
-      const last = runs[runs.length - 1];
-      if (last && last.grouped === groupable) last.messages.push(message);
-      else runs.push({ grouped: groupable, messages: [message] });
+      if (message.type === 'user' && turn.length > 0) {
+        addTurn(turn, false);
+        turn = [];
+      }
+      turn.push(message);
     }
-    // One call on its own gains nothing from a wrapper around it.
-    return runs.map((run) => (run.grouped && run.messages.length < 2 ? { ...run, grouped: false } : run));
-  }, [visibleMessages]);
+    if (turn.length > 0 || isLoading) addTurn(turn, true);
+    return runs;
+  }, [visibleMessages, isLoading]);
 
   // Keep keys stable across prepends so existing MessageComponent instances retain local state.
   const getMessageKey = useCallback((message: ChatMessage) => {
@@ -157,7 +210,7 @@ export default function ChatMessagesPane({
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-0 py-2 sm:space-y-2 sm:px-3 sm:py-2.5"
+      className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden overscroll-y-contain px-0 py-2 sm:space-y-2 sm:px-3 sm:py-2.5"
     >
       {isLoadingSessionMessages && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
@@ -282,9 +335,10 @@ export default function ChatMessagesPane({
             if (!run.grouped) return rendered;
             return (
               <ToolCallGroup
-                key={`tool-run-${getMessageKey(run.messages[0])}`}
+                key={run.messages[0] ? `tool-run-${getMessageKey(run.messages[0])}` : 'tool-run-live'}
                 messages={run.messages}
                 defaultOpen={Boolean(autoExpandTools)}
+                live={run.live}
               >
                 {rendered}
               </ToolCallGroup>

@@ -496,7 +496,12 @@ export function useProjectsState({
 
     // Project membership is resolved through `projectId` after the migration.
     for (const project of projects) {
-      const claudeSession = project.sessions?.find((session) => session.id === sessionId);
+      // A subagent run is listed under its parent, not among the sessions.
+      const claudeSession =
+        project.sessions?.find((session) => session.id === sessionId)
+        ?? project.sessions
+          ?.flatMap((session) => (Array.isArray(session.subagents) ? (session.subagents as ProjectSession[]) : []))
+          .find((session) => session.id === sessionId);
       if (claudeSession) {
         const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
